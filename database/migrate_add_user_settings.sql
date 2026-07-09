@@ -1,0 +1,19 @@
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  custom_dictionary TEXT NOT NULL DEFAULT '',
+  transcription_settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE user_settings
+  ADD COLUMN IF NOT EXISTS custom_dictionary TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE user_settings
+  ADD COLUMN IF NOT EXISTS transcription_settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE user_settings
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+ALTER TABLE user_settings
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
