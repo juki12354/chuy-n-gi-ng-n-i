@@ -37,6 +37,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { QuotaStatusPanel } from "@/components/quota-status-panel";
+import { PhilosophyQuoteCard } from "@/components/philosophy-quote-card";
 import { formatQuotaTime, type QuotaStatus } from "@/lib/quota";
 import {
   SPEECH_LANGUAGE_OPTIONS,
@@ -1152,18 +1153,7 @@ function UploadPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card/80 p-6 shadow-soft">
-            <p className="text-5xl font-black leading-none text-primary/30">
-              “
-            </p>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              Learn from yesterday, live for today, hope for tomorrow. The
-              important thing is not to stop questioning.
-            </p>
-            <p className="mt-3 text-sm font-black text-primary">
-              ALBERT EINSTEIN
-            </p>
-          </div>
+          <PhilosophyQuoteCard />
         </aside>
       </main>
 
