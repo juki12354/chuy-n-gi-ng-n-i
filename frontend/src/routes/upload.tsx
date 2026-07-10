@@ -760,11 +760,22 @@ function UploadPage() {
                 filename={uploadFile.name}
                 fileSize={uploadFile.size}
                 status={uploadStatus}
-                duration={duration}
+                duration={duration ?? expectedDuration}
                 date={new Date().toISOString()}
                 error={uploadError}
                 onClear={reset}
               >
+                {uploadStatus !== "done" && (
+                  <UploadTimeEstimatePanel
+                    audioMode={audioMode}
+                    expectedDuration={expectedDuration}
+                    pendingUploadSeconds={pendingUploadSeconds}
+                    projectedRemainingSeconds={projectedRemainingSeconds}
+                    quota={quota}
+                    uploadStatus={uploadStatus}
+                  />
+                )}
+
                 {uploadStatus === "idle" && (
                   <div className="space-y-4">
                     <div className="rounded-xl border border-border bg-background/45 p-4">
@@ -1232,6 +1243,105 @@ function UploadPage() {
       </Dialog>
 
       <SonixStyleFooter />
+    </div>
+  );
+}
+
+function UploadTimeEstimatePanel({
+  audioMode,
+  expectedDuration,
+  pendingUploadSeconds,
+  projectedRemainingSeconds,
+  quota,
+  uploadStatus,
+}: {
+  audioMode: AudioMode;
+  expectedDuration: number | null;
+  pendingUploadSeconds: number;
+  projectedRemainingSeconds: number | null;
+  quota: QuotaStatus | null;
+  uploadStatus: UploadStatus;
+}) {
+  const durationLabel =
+    expectedDuration !== null
+      ? formatQuotaTime(Math.ceil(expectedDuration))
+      : "Chưa đọc được";
+  const remainingLabel = quota
+    ? formatQuotaTime(quota.remainingSeconds)
+    : "Đang tải";
+  const projectedLabel =
+    projectedRemainingSeconds !== null
+      ? formatQuotaTime(projectedRemainingSeconds)
+      : "Chưa tính được";
+  const quotaPercent =
+    quota && pendingUploadSeconds > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (pendingUploadSeconds / Math.max(1, quota.remainingSeconds)) * 100,
+          ),
+        )
+      : 0;
+
+  return (
+    <div className="mb-5 rounded-xl border border-primary/25 bg-primary/10 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm font-black text-primary">
+          <Clock className="h-4 w-4" />
+          Tính thời gian upload
+        </div>
+        <span className="rounded-full bg-card px-3 py-1 text-xs font-black text-primary">
+          {uploadStatus === "uploading" ? "Đang xử lý" : "Ước tính trước"}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg bg-card/70 px-3 py-3">
+          <p className="text-xs font-bold text-muted-foreground">
+            Thời lượng file
+          </p>
+          <p className="mt-1 text-lg font-black text-foreground">
+            {durationLabel}
+          </p>
+        </div>
+        <div className="rounded-lg bg-card/70 px-3 py-3">
+          <p className="text-xs font-bold text-muted-foreground">
+            Gói còn lại
+          </p>
+          <p className="mt-1 text-lg font-black text-foreground">
+            {remainingLabel}
+          </p>
+        </div>
+        <div className="rounded-lg bg-card/70 px-3 py-3">
+          <p className="text-xs font-bold text-muted-foreground">
+            Sau khi xử lý
+          </p>
+          <p className="mt-1 text-lg font-black text-primary">
+            {projectedLabel}
+          </p>
+        </div>
+      </div>
+
+      {pendingUploadSeconds > 0 && (
+        <div className="mt-4">
+          <div className="flex items-center justify-between gap-3 text-xs font-bold text-muted-foreground">
+            <span>Quota dự kiến dùng</span>
+            <span>{formatQuotaTime(pendingUploadSeconds)}</span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-card">
+            <div
+              className="h-full rounded-full bg-primary"
+              style={{ width: `${quotaPercent}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      <p className="mt-3 text-xs font-semibold leading-5 text-muted-foreground">
+        {audioMode === "song"
+          ? "File bài hát có thể lâu hơn vì server cần tách vocal trước khi chuyển thành văn bản."
+          : "Khi chuyển xong, hệ thống sẽ trừ theo thời lượng thật của transcript."}
+      </p>
     </div>
   );
 }
