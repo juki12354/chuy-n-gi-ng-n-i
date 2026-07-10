@@ -1,6 +1,10 @@
 require("dotenv").config();
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
+const ffmpegStaticPath = require("ffmpeg-static");
 const { AssemblyAI } = require("assemblyai");
 const pool = require("../db");
 const {
@@ -12,6 +16,7 @@ const {
 const ALLOWED_EXT = /\.(mp3|wav|m4a|ogg|flac|aac|mp4|webm)$/i;
 const MAX_SIZE_MB = Number.parseInt(process.env.MAX_UPLOAD_MB || "200", 10);
 const UPLOADS_DIR = path.join(__dirname, "..", "uploads");
+const execFileAsync = promisify(execFile);
 
 const SONIX_API_BASE_URL = (
   process.env.SONIX_API_BASE_URL || "https://api.sonix.ai/v1"
@@ -49,6 +54,104 @@ function getSafeExtension(originalname = "") {
   const match = originalname.match(/\.([^.]+)$/);
   const ext = (match?.[1] || "webm").toLowerCase();
   return /^[a-z0-9]+$/.test(ext) ? ext : "webm";
+}
+
+function stripExtension(filename = "audio") {
+  return filename.replace(/\.[^.]+$/, "") || "audio";
+}
+
+function normalizeAudioMode(mode) {
+  const clean = String(mode || "")
+    .trim()
+    .toLowerCase();
+  if (["song", "music", "lyrics", "vocal"].includes(clean)) return "song";
+  return "speech";
+}
+
+function getFfmpegPath() {
+  return process.env.FFMPEG_PATH || ffmpegStaticPath || "ffmpeg";
+}
+
+function safeUnlink(filePath) {
+  if (!filePath) return;
+  fs.unlink(filePath, () => {});
+}
+
+async function prepareMusicAudioForStt(file, filename) {
+  if (process.env.AUDIO_PREPROCESSING_ENABLED === "false") {
+    return { file, applied: false, warning: null };
+  }
+
+  const ffmpegPath = getFfmpegPath();
+  if (!ffmpegPath) {
+    return {
+      file,
+      applied: false,
+      warning: "Chưa có ffmpeg nên chưa thể làm rõ vocal trước khi phiên âm.",
+    };
+  }
+
+  const tempBase = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const inputPath = path.join(
+    os.tmpdir(),
+    `${tempBase}.${getSafeExtension(file.originalname || filename)}`,
+  );
+  const outputPath = path.join(os.tmpdir(), `${tempBase}-vocal.wav`);
+  const filters =
+    process.env.SONG_AUDIO_FILTER ||
+    "highpass=f=120,lowpass=f=8000,afftdn=nf=-25,dynaudnorm=f=150:g=15,acompressor=threshold=-20dB:ratio=3:attack=5:release=120,loudnorm=I=-16:LRA=11:TP=-1.5";
+  const timeout = Number.parseInt(
+    process.env.AUDIO_PREPROCESSING_TIMEOUT_MS || `${3 * 60 * 1000}`,
+    10,
+  );
+
+  try {
+    fs.writeFileSync(inputPath, file.buffer);
+    await execFileAsync(
+      ffmpegPath,
+      [
+        "-hide_banner",
+        "-y",
+        "-i",
+        inputPath,
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-af",
+        filters,
+        "-f",
+        "wav",
+        outputPath,
+      ],
+      { timeout, maxBuffer: 8 * 1024 * 1024 },
+    );
+
+    const buffer = fs.readFileSync(outputPath);
+    return {
+      file: {
+        ...file,
+        buffer,
+        size: buffer.length,
+        originalname: `${stripExtension(filename)}-vocal.wav`,
+        mimetype: "audio/wav",
+      },
+      applied: true,
+      warning: null,
+    };
+  } catch (error) {
+    return {
+      file,
+      applied: false,
+      warning:
+        error.message ||
+        "Không xử lý được audio bằng ffmpeg, backend sẽ gửi file gốc cho provider.",
+    };
+  } finally {
+    safeUnlink(inputPath);
+    safeUnlink(outputPath);
+  }
 }
 
 function getTranscriptionProvider() {
@@ -460,33 +563,58 @@ async function transcribeAudio({
   speakerLabels,
   filename,
   language,
+  audioMode = "speech",
   dictionaryKeywords = [],
   transcriptionSettings = {},
 }) {
   const provider = getTranscriptionProvider();
   assertSupportedProvider(provider);
+  const normalizedAudioMode = normalizeAudioMode(audioMode);
+  const preprocessing =
+    normalizedAudioMode === "song"
+      ? await prepareMusicAudioForStt(file, filename)
+      : { file, applied: false, warning: null };
+  const providerFile = preprocessing.file;
 
   if (provider === "sonix") {
-    return transcribeWithSonix({
-      file,
+    const result = await transcribeWithSonix({
+      file: providerFile,
       speakerLabels,
-      filename,
+      filename: providerFile.originalname || filename,
       language,
       dictionaryKeywords,
     });
+    return {
+      ...result,
+      audioMode: normalizedAudioMode,
+      preprocessingApplied: preprocessing.applied,
+      preprocessingWarning: preprocessing.warning,
+    };
   }
   if (provider === "deepgram") {
-    return transcribeWithDeepgram({
-      file,
+    const result = await transcribeWithDeepgram({
+      file: providerFile,
       speakerLabels,
-      filename,
+      filename: providerFile.originalname || filename,
       language,
       dictionaryKeywords,
       transcriptionSettings,
     });
+    return {
+      ...result,
+      audioMode: normalizedAudioMode,
+      preprocessingApplied: preprocessing.applied,
+      preprocessingWarning: preprocessing.warning,
+    };
   }
 
-  return transcribeWithAssemblyAI({ file, speakerLabels });
+  const result = await transcribeWithAssemblyAI({ file: providerFile, speakerLabels });
+  return {
+    ...result,
+    audioMode: normalizedAudioMode,
+    preprocessingApplied: preprocessing.applied,
+    preprocessingWarning: preprocessing.warning,
+  };
 }
 
 async function transcribeAndSave({
@@ -495,6 +623,7 @@ async function transcribeAndSave({
   speakerLabels = false,
   source = "upload",
   language = "auto",
+  audioMode = "speech",
   translateTo = "",
   dictionaryKeywords = [],
   transcriptionSettings = {},
@@ -517,6 +646,7 @@ async function transcribeAndSave({
       speakerLabels,
       filename,
       language: sourceLanguage,
+      audioMode,
       dictionaryKeywords,
       transcriptionSettings,
     });
@@ -525,9 +655,12 @@ async function transcribeAndSave({
     );
 
     if (!String(result.text || "").trim()) {
+      const isSongMode = normalizeAudioMode(audioMode) === "song";
       throw createHttpError(
         422,
-        "Không phát hiện lời nói rõ để xuất thành văn bản. Nếu đây là file nhạc MP3, hãy dùng bản có vocal/lời hát rõ hơn hoặc giảm nhạc nền rồi thử lại.",
+        isSongMode
+          ? "Chế độ bài hát đã thử làm rõ vocal nhưng vẫn chưa phát hiện đủ lời để xuất văn bản. Hãy thử file có vocal rõ hơn, bản karaoke/acapella, hoặc nối thêm model tách vocal AI như Demucs."
+          : "Không phát hiện lời nói rõ để xuất thành văn bản. Nếu đây là file nhạc MP3, hãy bật chế độ Bài hát/nhạc nền rồi thử lại.",
       );
     }
 
@@ -587,6 +720,9 @@ async function transcribeAndSave({
       id: rows[0].id,
       provider: result.provider,
       providerId: result.providerId,
+      audioMode: result.audioMode,
+      preprocessingApplied: result.preprocessingApplied,
+      preprocessingWarning: result.preprocessingWarning,
       filename: rows[0].filename,
       fileSize: rows[0].file_size,
       duration: rows[0].duration,

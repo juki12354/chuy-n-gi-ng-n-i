@@ -109,6 +109,10 @@ router.post(
         : null;
       const language =
         req.body.language || req.body.transcriptionLanguage || "auto";
+      const audioMode =
+        req.body.audioMode === "song" || req.body.audioMode === "music"
+          ? "song"
+          : "speech";
       const translateTo =
         req.body.translateTo || req.body.targetLanguage || "";
       const userSettings = await getUserSettings(req.user.id);
@@ -128,6 +132,7 @@ router.post(
         file: req.file,
         source,
         language,
+        audioMode,
         translateTo,
         dictionaryKeywords,
         transcriptionSettings: userSettings.transcriptionSettings,
@@ -147,6 +152,9 @@ router.post(
         object: "transcription",
         provider: result.provider,
         providerId: result.providerId,
+        audioMode: result.audioMode,
+        preprocessingApplied: result.preprocessingApplied,
+        preprocessingWarning: result.preprocessingWarning,
         filename: result.filename,
         duration: result.duration,
         processingSeconds: result.processingSeconds,

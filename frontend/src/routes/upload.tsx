@@ -72,6 +72,7 @@ interface HistoryItem {
 
 type UploadStatus = "idle" | "uploading" | "done" | "error";
 type UploadMode = "single" | "multi" | "link";
+type AudioMode = "speech" | "song";
 type ActionDialogState = {
   title: string;
   description: string;
@@ -151,12 +152,14 @@ function UploadPage() {
   const [uploadError, setUploadError] = useState("");
   const [copied, setCopied] = useState(false);
   const [speakerLabels, setSpeakerLabels] = useState(false);
+  const [audioMode, setAudioMode] = useState<AudioMode>("speech");
   const [transcriptionLanguage, setTranscriptionLanguage] = useState("auto");
   const [translateTo, setTranslateTo] = useState("none");
   const [translation, setTranslation] = useState<TranslationResult | null>(
     null,
   );
   const [translationError, setTranslationError] = useState("");
+  const [audioProcessingNote, setAudioProcessingNote] = useState("");
   const [words, setWords] = useState<Word[]>([]);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -312,6 +315,7 @@ function UploadPage() {
     setTranscription("");
     setTranslation(null);
     setTranslationError("");
+    setAudioProcessingNote("");
     setDuration(null);
     setWords([]);
   }
@@ -332,6 +336,7 @@ function UploadPage() {
       formData.append("audio", uploadFile);
       formData.append("speakerLabels", String(speakerLabels));
       formData.append("source", "upload");
+      formData.append("audioMode", audioMode);
       formData.append("language", transcriptionLanguage);
       formData.append("translateTo", translateTo);
       if (expectedDuration) {
@@ -356,6 +361,8 @@ function UploadPage() {
         quota?: QuotaStatus;
         translation?: TranslationResult | null;
         translationError?: string;
+        preprocessingApplied?: boolean;
+        preprocessingWarning?: string | null;
       };
       if (!res.ok) {
         if (data.quota) setQuota(data.quota);
@@ -366,6 +373,13 @@ function UploadPage() {
       setTranscription(data.text ?? "");
       setTranslation(data.translation ?? null);
       setTranslationError(data.translationError ?? "");
+      setAudioProcessingNote(
+        data.preprocessingWarning
+          ? `Chế độ bài hát: ${data.preprocessingWarning}`
+          : data.preprocessingApplied
+            ? "Đã làm rõ vocal/giọng hát trước khi chuyển thành văn bản."
+            : "",
+      );
       setDuration(data.duration ?? null);
       setWords(data.words ?? []);
       if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -474,6 +488,7 @@ function UploadPage() {
     setTranscription("");
     setTranslation(null);
     setTranslationError("");
+    setAudioProcessingNote("");
     setUploadError("");
     setDuration(null);
     setExpectedDuration(null);
@@ -745,6 +760,53 @@ function UploadPage() {
               >
                 {uploadStatus === "idle" && (
                   <div className="space-y-4">
+                    <div className="rounded-xl border border-border bg-background/45 p-4">
+                      <p className="text-sm font-bold">Nội dung âm thanh</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Chọn đúng loại file để backend xử lý âm thanh phù hợp
+                        trước khi chuyển thành văn bản.
+                      </p>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        {[
+                          {
+                            value: "speech" as const,
+                            title: "Lời nói rõ",
+                            desc: "Họp, bài giảng, podcast, phỏng vấn.",
+                          },
+                          {
+                            value: "song" as const,
+                            title: "Bài hát / nhạc nền",
+                            desc: "Thử làm rõ vocal trước khi gửi AI.",
+                          },
+                        ].map((item) => (
+                          <button
+                            key={item.value}
+                            type="button"
+                            onClick={() => setAudioMode(item.value)}
+                            className={`rounded-xl border px-4 py-3 text-left transition ${
+                              audioMode === item.value
+                                ? "border-primary bg-primary/15 text-primary"
+                                : "border-border bg-card/60 text-foreground hover:border-primary/50"
+                            }`}
+                          >
+                            <span className="block text-sm font-black">
+                              {item.title}
+                            </span>
+                            <span className="mt-1 block text-xs font-semibold leading-5 text-muted-foreground">
+                              {item.desc}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      {audioMode === "song" && (
+                        <p className="mt-3 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-xs font-semibold leading-5 text-primary">
+                          Lưu ý: đây là chế độ hỗ trợ lấy lời từ nhạc tốt hơn,
+                          nhưng bài có beat lớn hoặc vocal bị lẫn sâu vẫn cần
+                          tách vocal AI chuyên dụng.
+                        </p>
+                      )}
+                    </div>
+
                     <label className="flex items-center justify-between rounded-xl border border-border bg-background/45 px-4 py-3">
                       <div>
                         <p className="text-sm font-bold">Gắn nhãn người nói</p>
@@ -821,10 +883,14 @@ function UploadPage() {
                   <div className="rounded-xl border border-primary/25 bg-primary/10 px-4 py-5 text-center">
                     <span className="mx-auto block h-10 w-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
                     <p className="mt-3 font-bold text-primary">
-                      Đang xử lý âm thanh...
+                      {audioMode === "song"
+                        ? "Đang làm rõ vocal và chuyển thành văn bản..."
+                        : "Đang xử lý âm thanh..."}
                     </p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Hệ thống đang phân tích và chuyển giọng nói thành văn bản.
+                      {audioMode === "song"
+                        ? "Backend sẽ tiền xử lý file bằng ffmpeg trước khi gửi provider speech-to-text."
+                        : "Hệ thống đang phân tích và chuyển giọng nói thành văn bản."}
                     </p>
                   </div>
                 )}
@@ -905,6 +971,12 @@ function UploadPage() {
                       <div className="rounded-xl border border-destructive/25 bg-destructive/10 p-4 text-sm text-destructive">
                         Transcript gốc đã tạo xong, nhưng chưa dịch được:{" "}
                         {translationError}
+                      </div>
+                    )}
+
+                    {audioProcessingNote && (
+                      <div className="rounded-xl border border-primary/25 bg-primary/10 p-4 text-sm font-semibold leading-6 text-primary">
+                        {audioProcessingNote}
                       </div>
                     )}
 
