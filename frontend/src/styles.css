@@ -257,6 +257,11 @@
   animation: gradient-shift 4s ease infinite;
 }
 
+@keyframes quote-progress {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
 @utility scrollbar-primary {
   scrollbar-width: thin;
   scrollbar-color: var(--primary) #17092f;

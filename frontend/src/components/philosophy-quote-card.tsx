@@ -1,5 +1,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const QUOTE_ROTATION_MS = 5000;
 
 const PHILOSOPHY_QUOTES = [
   {
@@ -36,6 +38,14 @@ export function PhilosophyQuoteCard() {
   const [activeIndex, setActiveIndex] = useState(0);
   const quote = PHILOSOPHY_QUOTES[activeIndex];
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setActiveIndex((current) => (current + 1) % PHILOSOPHY_QUOTES.length);
+    }, QUOTE_ROTATION_MS);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
   function move(step: number) {
     setActiveIndex((current) => {
       const next = current + step;
@@ -54,12 +64,20 @@ export function PhilosophyQuoteCard() {
         </span>
       </div>
 
-      <p className="mt-1 min-h-24 text-sm leading-6 text-muted-foreground">
+      <p
+        key={quote.text}
+        className="mt-1 min-h-24 animate-in fade-in duration-500 text-sm leading-6 text-muted-foreground"
+      >
         {quote.text}
       </p>
 
       <div className="mt-3 flex items-center justify-between gap-3">
-        <p className="text-sm font-black text-primary">{quote.author}</p>
+        <p
+          key={quote.author}
+          className="animate-in fade-in duration-500 text-sm font-black text-primary"
+        >
+          {quote.author}
+        </p>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -92,6 +110,16 @@ export function PhilosophyQuoteCard() {
             aria-label={`Chọn triết lý ${index + 1}`}
           />
         ))}
+      </div>
+
+      <div className="mt-3 h-1 overflow-hidden rounded-full bg-primary/10">
+        <div
+          key={activeIndex}
+          className="h-full rounded-full bg-primary"
+          style={{
+            animation: `quote-progress ${QUOTE_ROTATION_MS}ms linear forwards`,
+          }}
+        />
       </div>
     </div>
   );
