@@ -31,6 +31,10 @@ import { Document, Packer, Paragraph, TextRun } from "docx";
 import { useAuth } from "@/context/AuthContext";
 import { AuthenticatedHeader } from "@/components/auth-app-header";
 import {
+  TranscriptSegments,
+  type TranscriptSegment,
+} from "@/components/transcript-segments";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -45,6 +49,7 @@ import {
   languageLabel,
   type TranslationResult,
 } from "@/lib/language-options";
+import { downloadSrt } from "@/lib/srt";
 
 const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ??
@@ -70,6 +75,8 @@ interface HistoryItem {
   translation_target_language?: string | null;
   created_at: string;
 }
+
+type SpeakerNames = Record<string, string>;
 
 type UploadStatus = "idle" | "uploading" | "done" | "error";
 type UploadMode = "single" | "multi" | "link";
@@ -162,6 +169,11 @@ function UploadPage() {
   const [translationError, setTranslationError] = useState("");
   const [audioProcessingNote, setAudioProcessingNote] = useState("");
   const [words, setWords] = useState<Word[]>([]);
+  const [segments, setSegments] = useState<TranscriptSegment[]>([]);
+  const [speakerNames, setSpeakerNames] = useState<SpeakerNames>({});
+  const [currentTranscriptionId, setCurrentTranscriptionId] = useState<
+    number | null
+  >(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [uploadMode, setUploadMode] = useState<UploadMode>("single");
@@ -319,6 +331,9 @@ function UploadPage() {
     setAudioProcessingNote("");
     setDuration(null);
     setWords([]);
+    setSegments([]);
+    setSpeakerNames({});
+    setCurrentTranscriptionId(null);
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -357,6 +372,8 @@ function UploadPage() {
         duration?: number;
         error?: string;
         words?: Word[];
+        segments?: TranscriptSegment[];
+        speaker_names?: SpeakerNames;
         filename?: string;
         createdAt?: string;
         quota?: QuotaStatus;
@@ -390,6 +407,9 @@ function UploadPage() {
       );
       setDuration(data.duration ?? null);
       setWords(data.words ?? []);
+      setSegments(data.segments ?? []);
+      setSpeakerNames(data.speaker_names ?? {});
+      setCurrentTranscriptionId(data.id ?? null);
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       setAudioUrl(URL.createObjectURL(uploadFile));
       setUploadStatus("done");
@@ -487,10 +507,45 @@ function UploadPage() {
     URL.revokeObjectURL(url);
   }
 
+  function handleDownloadSrt() {
+    downloadSrt(uploadFile?.name ?? "transcript", words, segments, speakerNames);
+  }
+
+  async function handleRenameSpeaker(speaker: string, name: string) {
+    if (!currentTranscriptionId || !token) return;
+    const response = await fetch(
+      `${API_URL}/api/transcribe/${currentTranscriptionId}/speakers`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ speaker, name }),
+      },
+    );
+    const data = (await response.json()) as {
+      error?: string;
+      speakerNames?: SpeakerNames;
+      segments?: TranscriptSegment[];
+      text?: string;
+    };
+    if (!response.ok) {
+      setUploadError(data.error ?? "Không thể đổi tên người nói");
+      return;
+    }
+    setSpeakerNames(data.speakerNames ?? {});
+    if (data.segments) setSegments(data.segments);
+    if (data.text) setTranscription(data.text);
+  }
+
   function reset() {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(null);
     setWords([]);
+    setSegments([]);
+    setSpeakerNames({});
+    setCurrentTranscriptionId(null);
     setUploadFile(null);
     setUploadStatus("idle");
     setTranscription("");
@@ -947,6 +1002,13 @@ function UploadPage() {
                       </div>
                     )}
 
+                    <TranscriptSegments
+                      segments={segments}
+                      audioRef={audioRef}
+                      speakerNames={speakerNames}
+                      onRenameSpeaker={handleRenameSpeaker}
+                    />
+
                     {words.length > 0 ? (
                       <div className="rounded-xl border border-border bg-background/45 px-5 py-4">
                         <p className="mb-2 text-xs font-semibold text-muted-foreground">
@@ -999,7 +1061,7 @@ function UploadPage() {
                       </div>
                     )}
 
-                    <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="grid gap-2 sm:grid-cols-4">
                       <button
                         onClick={() => void handleCopy()}
                         className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-bold transition hover:border-primary/50 hover:text-primary"
@@ -1017,6 +1079,14 @@ function UploadPage() {
                       >
                         <Download className="h-4 w-4" />
                         Tải .txt
+                      </button>
+                      <button
+                        onClick={handleDownloadSrt}
+                        disabled={segments.length === 0 && words.length === 0}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm font-black text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        <Download className="h-4 w-4" />
+                        Tải .srt
                       </button>
                       <button
                         onClick={() => void handleDownload()}

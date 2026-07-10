@@ -21,7 +21,12 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import { AuthenticatedHeader } from "@/components/auth-app-header";
+import {
+  TranscriptSegments,
+  type TranscriptSegment,
+} from "@/components/transcript-segments";
 import { languageLabel } from "@/lib/language-options";
+import { downloadSrt } from "@/lib/srt";
 
 const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ??
@@ -41,6 +46,8 @@ interface HistoryItem {
   processing_seconds: number | null;
   text: string;
   words: Word[] | null;
+  segments: TranscriptSegment[] | null;
+  speaker_names: Record<string, string> | null;
   audio_filename: string | null;
   source_language: string | null;
   translated_text: string | null;
@@ -384,6 +391,54 @@ function HistoryPage() {
     URL.revokeObjectURL(url);
   }
 
+  function handleDownloadSrt(item: HistoryItem) {
+    downloadSrt(
+      item.filename,
+      item.words ?? [],
+      item.segments ?? [],
+      item.speaker_names ?? {},
+    );
+  }
+
+  async function handleRenameSpeaker(
+    item: HistoryItem,
+    speaker: string,
+    name: string,
+  ) {
+    const response = await fetch(`${API_URL}/api/transcribe/${item.id}/speakers`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ speaker, name }),
+    });
+    const data = (await response.json()) as {
+      speakerNames?: Record<string, string>;
+      segments?: TranscriptSegment[];
+      text?: string;
+    };
+    if (!response.ok) return;
+
+    if (expanded === item.id && data.text && editRef.current) {
+      editRef.current.textContent = data.text;
+      setLocalChanged(false);
+    }
+
+    setItems((prev) =>
+      prev.map((entry) =>
+        entry.id === item.id
+          ? {
+              ...entry,
+              speaker_names: data.speakerNames ?? entry.speaker_names,
+              segments: data.segments ?? entry.segments,
+              text: data.text ?? entry.text,
+            }
+          : entry,
+      ),
+    );
+  }
+
   if (isLoading)
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -665,6 +720,15 @@ function HistoryPage() {
                       )}
 
                       {/* ContentEditable text — always editable inline */}
+                      <TranscriptSegments
+                        segments={item.segments ?? []}
+                        audioRef={audioRef}
+                        speakerNames={item.speaker_names ?? {}}
+                        onRenameSpeaker={(speaker, name) =>
+                          handleRenameSpeaker(item, speaker, name)
+                        }
+                      />
+
                       <div className="rounded-2xl border border-border bg-background/60 px-5 py-4">
                         <p className="text-xs text-muted-foreground mb-2">
                           Văn bản — có thể chỉnh sửa trực tiếp
@@ -741,6 +805,16 @@ function HistoryPage() {
                           className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-semibold text-primary transition hover:bg-primary/20"
                         >
                           <Download className="h-3 w-3" /> Tải .txt
+                        </button>
+                        <button
+                          onClick={() => handleDownloadSrt(item)}
+                          disabled={
+                            (!item.segments || item.segments.length === 0) &&
+                            (!item.words || item.words.length === 0)
+                          }
+                          className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-semibold text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-45"
+                        >
+                          <Download className="h-3 w-3" /> Tải .srt
                         </button>
                         <button
                           onClick={() => void handleDownload(item)}

@@ -30,6 +30,10 @@ import {
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import { useAuth } from "@/context/AuthContext";
 import { AuthenticatedHeader } from "@/components/auth-app-header";
+import {
+  TranscriptSegments,
+  type TranscriptSegment,
+} from "@/components/transcript-segments";
 import { QuotaStatusPanel } from "@/components/quota-status-panel";
 import { formatQuotaTime, type QuotaStatus } from "@/lib/quota";
 import {
@@ -38,6 +42,7 @@ import {
   languageLabel,
   type TranslationResult,
 } from "@/lib/language-options";
+import { downloadSrt } from "@/lib/srt";
 
 const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ??
@@ -48,6 +53,8 @@ interface Word {
   start: number;
   end: number;
 }
+
+type SpeakerNames = Record<string, string>;
 
 type RecordStatus =
   | "idle"
@@ -113,6 +120,11 @@ function RecordPage() {
   );
   const [translationError, setTranslationError] = useState("");
   const [words, setWords] = useState<Word[]>([]);
+  const [segments, setSegments] = useState<TranscriptSegment[]>([]);
+  const [speakerNames, setSpeakerNames] = useState<SpeakerNames>({});
+  const [currentTranscriptionId, setCurrentTranscriptionId] = useState<
+    number | null
+  >(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpView, setHelpView] = useState<HelpView>("home");
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
@@ -497,10 +509,13 @@ function RecordPage() {
         body: formData,
       });
       const data = (await res.json()) as {
+        id?: number;
         text?: string;
         duration?: number;
         error?: string;
         words?: Word[];
+        segments?: TranscriptSegment[];
+        speaker_names?: SpeakerNames;
         quota?: QuotaStatus;
         processingSeconds?: number;
         translation?: TranslationResult | null;
@@ -517,6 +532,9 @@ function RecordPage() {
       setTranslationError(data.translationError ?? "");
       setDuration(data.duration ?? null);
       setWords(data.words ?? []);
+      setSegments(data.segments ?? []);
+      setSpeakerNames(data.speaker_names ?? {});
+      setCurrentTranscriptionId(data.id ?? null);
       if (data.quota) setQuota(data.quota);
       setQuotaRefreshKey((key) => key + 1);
       setStatus("done");
@@ -591,6 +609,38 @@ function RecordPage() {
     URL.revokeObjectURL(url);
   }
 
+  function handleDownloadSrt() {
+    downloadSrt("recording", words, segments, speakerNames);
+  }
+
+  async function handleRenameSpeaker(speaker: string, name: string) {
+    if (!currentTranscriptionId || !token) return;
+    const response = await fetch(
+      `${API_URL}/api/transcribe/${currentTranscriptionId}/speakers`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ speaker, name }),
+      },
+    );
+    const data = (await response.json()) as {
+      error?: string;
+      speakerNames?: SpeakerNames;
+      segments?: TranscriptSegment[];
+      text?: string;
+    };
+    if (!response.ok) {
+      setError(data.error ?? "Không thể đổi tên người nói");
+      return;
+    }
+    setSpeakerNames(data.speakerNames ?? {});
+    if (data.segments) setSegments(data.segments);
+    if (data.text) setTranscription(data.text);
+  }
+
   function handleDownloadAudio() {
     if (!audioUrl) return;
     const ext = audioMime.includes("webm") ? "webm" : "ogg";
@@ -610,6 +660,9 @@ function RecordPage() {
     stopAudioMonitor();
     setAudioUrl(null);
     setWords([]);
+    setSegments([]);
+    setSpeakerNames({});
+    setCurrentTranscriptionId(null);
     if (editRef.current) editRef.current.innerHTML = "";
     spanRefs.current = [];
     activeIdxRef.current = -1;
@@ -817,6 +870,9 @@ function RecordPage() {
               audioRef={audioRef}
               handleTimeUpdate={handleTimeUpdate}
               words={words}
+              segments={segments}
+              speakerNames={speakerNames}
+              handleRenameSpeaker={handleRenameSpeaker}
               editRef={editRef}
               transcription={transcription}
               setTranscription={setTranscription}
@@ -826,6 +882,7 @@ function RecordPage() {
               handleCopy={handleCopy}
               handleDownloadAudio={handleDownloadAudio}
               handleDownloadTxt={handleDownloadTxt}
+              handleDownloadSrt={handleDownloadSrt}
               handleDownload={handleDownload}
               duration={duration}
               recordTime={recordTime}
@@ -1139,6 +1196,9 @@ function TranscriptResult({
   audioRef,
   handleTimeUpdate,
   words,
+  segments,
+  speakerNames,
+  handleRenameSpeaker,
   editRef,
   transcription,
   setTranscription,
@@ -1148,6 +1208,7 @@ function TranscriptResult({
   handleCopy,
   handleDownloadAudio,
   handleDownloadTxt,
+  handleDownloadSrt,
   handleDownload,
   duration,
   recordTime,
@@ -1157,6 +1218,9 @@ function TranscriptResult({
   audioRef: RefObject<HTMLAudioElement | null>;
   handleTimeUpdate: () => void;
   words: Word[];
+  segments: TranscriptSegment[];
+  speakerNames: SpeakerNames;
+  handleRenameSpeaker: (speaker: string, name: string) => Promise<void>;
   editRef: RefObject<HTMLDivElement | null>;
   transcription: string;
   setTranscription: (value: string) => void;
@@ -1166,6 +1230,7 @@ function TranscriptResult({
   handleCopy: () => Promise<void>;
   handleDownloadAudio: () => void;
   handleDownloadTxt: () => void;
+  handleDownloadSrt: () => void;
   handleDownload: () => Promise<void>;
   duration: number | null;
   recordTime: number;
@@ -1210,6 +1275,13 @@ function TranscriptResult({
         </div>
       )}
 
+      <TranscriptSegments
+        segments={segments}
+        audioRef={audioRef}
+        speakerNames={speakerNames}
+        onRenameSpeaker={handleRenameSpeaker}
+      />
+
       {words.length > 0 ? (
         <div className="rounded-xl border border-border bg-background/45 px-5 py-4">
           <p className="mb-2 text-xs font-semibold text-muted-foreground">
@@ -1252,7 +1324,7 @@ function TranscriptResult({
         </div>
       )}
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-4">
+      <div className="mt-4 grid gap-3 sm:grid-cols-5">
         <button
           onClick={() => void handleCopy()}
           className="inline-flex items-center justify-center gap-2 rounded-full border border-border px-5 py-3 text-sm font-black transition hover:border-primary/50 hover:text-primary"
@@ -1277,6 +1349,14 @@ function TranscriptResult({
         >
           <Download className="h-4 w-4" />
           Tải .txt
+        </button>
+        <button
+          onClick={handleDownloadSrt}
+          disabled={segments.length === 0 && words.length === 0}
+          className="inline-flex items-center justify-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-5 py-3 text-sm font-black text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          <Download className="h-4 w-4" />
+          Tải .srt
         </button>
         <button
           onClick={() => void handleDownload()}

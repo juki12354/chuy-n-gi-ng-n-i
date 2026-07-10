@@ -110,6 +110,12 @@ export function AuthenticatedHeader() {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild className="gap-2 cursor-pointer">
+                <Link to="/profile">
+                  <User className="h-4 w-4 text-primary" />
+                  Hồ sơ
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="gap-2 cursor-pointer">
                 <Link to="/dashboard" search={{ token: undefined }}>
                   <Home className="h-4 w-4 text-primary" />
                   Trang chủ

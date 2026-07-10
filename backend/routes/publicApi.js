@@ -174,6 +174,7 @@ router.post(
         .json({
           error: error.message || "Lỗi khi xử lý API",
           quota: error.details?.quota,
+          usageAlert: error.details?.usageAlert,
         });
     }
   },

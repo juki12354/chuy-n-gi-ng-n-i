@@ -132,6 +132,8 @@ router.post(
         processingSeconds: result.processingSeconds,
         filename: result.filename,
         words: result.words,
+        segments: result.segments,
+        speaker_names: result.speakerNames,
         createdAt: result.createdAt,
         quota,
       });
@@ -142,6 +144,7 @@ router.post(
         .json({
           error: err.message || "Lỗi khi chuyển đổi âm thanh",
           quota: err.details?.quota,
+          usageAlert: err.details?.usageAlert,
         });
     }
   },
@@ -151,7 +154,7 @@ router.post(
 router.get("/history", authMiddleware, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, filename, file_size, duration, processing_seconds, text, words, audio_filename,
+      `SELECT id, filename, file_size, duration, processing_seconds, text, words, segments, speaker_names, audio_filename,
          source_language, translated_text, translation_target_language, translation_provider, created_at
        FROM transcriptions WHERE user_id = $1
        ORDER BY created_at DESC LIMIT 20`,
@@ -213,11 +216,11 @@ router.post("/text", authMiddleware, async (req, res) => {
 
     const { rows } = await pool.query(
       `INSERT INTO transcriptions (
-         user_id, filename, file_size, duration, processing_seconds, text, words, audio_filename,
+         user_id, filename, file_size, duration, processing_seconds, text, words, segments, speaker_names, audio_filename,
          source_language, translated_text, translation_target_language, translation_provider
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, $10, $11)
-       RETURNING id, filename, file_size, duration, processing_seconds, text, words, audio_filename,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, '[]'::jsonb, '{}'::jsonb, NULL, $8, $9, $10, $11)
+       RETURNING id, filename, file_size, duration, processing_seconds, text, words, segments, speaker_names, audio_filename,
          source_language, translated_text, translation_target_language, translation_provider, created_at`,
       [
         req.user.id,
@@ -245,6 +248,8 @@ router.post("/text", authMiddleware, async (req, res) => {
       processingSeconds: rows[0].processing_seconds,
       text: rows[0].text,
       words: rows[0].words || [],
+      segments: rows[0].segments || [],
+      speaker_names: rows[0].speaker_names || {},
       sourceLanguage: rows[0].source_language,
       translation: rows[0].translated_text
         ? {
@@ -263,7 +268,62 @@ router.post("/text", authMiddleware, async (req, res) => {
     return res.status(err.statusCode || 500).json({
       error: err.message || "Không lưu được transcript realtime",
       quota: err.details?.quota,
+      usageAlert: err.details?.usageAlert,
     });
+  }
+});
+
+// PATCH /api/transcribe/:id/speakers — đổi tên hiển thị của người nói
+router.patch("/:id/speakers", authMiddleware, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const speaker = String(req.body?.speaker ?? "").trim();
+  const name = String(req.body?.name ?? "").trim();
+  if (
+    isNaN(id) ||
+    !/^[A-Za-z0-9 _.-]{1,60}$/.test(speaker) ||
+    !name ||
+    name.length > 100
+  ) {
+    return res.status(400).json({ error: "Thông tin người nói không hợp lệ" });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      "SELECT text, segments, speaker_names FROM transcriptions WHERE id = $1 AND user_id = $2",
+      [id, req.user.id],
+    );
+    if (!rows[0]) {
+      return res.status(404).json({ error: "Không tìm thấy bản ghi" });
+    }
+
+    const originalSegments = Array.isArray(rows[0].segments)
+      ? rows[0].segments
+      : [];
+    if (!originalSegments.some((segment) => segment.speaker === speaker)) {
+      return res.status(400).json({ error: "Người nói không tồn tại trong transcript" });
+    }
+
+    const speakerNames = { ...(rows[0].speaker_names ?? {}), [speaker]: name };
+    const segments = originalSegments.map((segment) =>
+      segment.speaker === speaker ? { ...segment, speakerName: name } : segment,
+    );
+    const text = segments
+      .map((segment) =>
+        segment.speaker
+          ? `${speakerNames[segment.speaker] || `Người nói ${segment.speaker}`}: ${segment.text}`
+          : segment.text,
+      )
+      .join("\n\n");
+
+    await pool.query(
+      "UPDATE transcriptions SET speaker_names = $1, segments = $2, text = $3 WHERE id = $4 AND user_id = $5",
+      [JSON.stringify(speakerNames), JSON.stringify(segments), text, id, req.user.id],
+    );
+
+    return res.json({ speakerNames, segments, text });
+  } catch (error) {
+    console.error("Rename speaker error:", error);
+    return res.status(500).json({ error: "Không thể đổi tên người nói" });
   }
 });
 

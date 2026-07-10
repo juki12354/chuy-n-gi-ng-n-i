@@ -5,6 +5,7 @@ const passportConfig = require('../config/passport');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const pool = require('../db');
+const { confirmUsageAlertToken } = require('../services/quotaService');
 
 const router = express.Router();
 
@@ -219,6 +220,26 @@ router.post('/logout', requireAuth, (_req, res) => {
   return res.json({ success: true });
 });
 
+// GET /api/auth/usage-alert/confirm - xac nhan tiep tuc sau nguong dung hang ngay
+router.get('/usage-alert/confirm', async (req, res) => {
+  try {
+    const token = String(req.query.token || '').trim();
+    if (!token) {
+      return res.redirect(`${FRONTEND_URL}/dashboard?usageAlert=missing_token`);
+    }
+
+    const confirmed = await confirmUsageAlertToken(token);
+    if (!confirmed) {
+      return res.redirect(`${FRONTEND_URL}/dashboard?usageAlert=invalid_token`);
+    }
+
+    return res.redirect(`${FRONTEND_URL}/dashboard?usageAlert=confirmed`);
+  } catch (error) {
+    console.error('Confirm usage alert error:', error);
+    return res.redirect(`${FRONTEND_URL}/dashboard?usageAlert=server_error`);
+  }
+});
+
 // PATCH /api/auth/profile — cập nhật họ tên
 router.patch('/profile', requireAuth, async (req, res) => {
   try {
@@ -269,6 +290,51 @@ router.post('/avatar', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Update avatar error:', error);
     return res.status(500).json({ error: 'Không cập nhật được ảnh đại diện' });
+  }
+});
+
+// POST /api/auth/change-password — đổi hoặc thiết lập mật khẩu đăng nhập
+router.post('/change-password', requireAuth, async (req, res) => {
+  try {
+    const currentPassword = String(req.body.currentPassword || '');
+    const newPassword = String(req.body.newPassword || '');
+    const confirmPassword = String(req.body.confirmPassword || '');
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ error: 'Mật khẩu xác nhận không khớp' });
+    }
+
+    const { rows } = await pool.query(
+      'SELECT id, password FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Không tìm thấy người dùng' });
+    }
+
+    const currentHash = rows[0].password;
+    if (currentHash) {
+      const matched = await bcrypt.compare(currentPassword, currentHash);
+      if (!matched) {
+        return res.status(400).json({ error: 'Mật khẩu hiện tại không đúng' });
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password = $1 WHERE id = $2', [
+      hashedPassword,
+      req.user.id,
+    ]);
+
+    return res.json({ message: 'Đã đổi mật khẩu' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    return res.status(500).json({ error: 'Không thể đổi mật khẩu' });
   }
 });
 

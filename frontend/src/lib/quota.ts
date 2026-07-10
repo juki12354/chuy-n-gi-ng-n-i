@@ -13,6 +13,10 @@ export interface QuotaStatus {
   remainingSeconds: number;
   percentUsed: number;
   alertSeconds: number;
+  usageAlertDailySeconds?: number;
+  usageAlertThresholdSeconds?: number;
+  usageAlertRequired?: boolean;
+  usageAlertConfirmed?: boolean;
   shouldAlert: boolean;
   isLimitReached: boolean;
   limits: {

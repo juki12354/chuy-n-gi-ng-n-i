@@ -14,6 +14,7 @@ import { Route as TranscriptionSettingsRouteImport } from './routes/transcriptio
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as RecordRouteImport } from './routes/record'
 import { Route as RealtimeRouteImport } from './routes/realtime'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HistoryRouteImport } from './routes/history'
@@ -46,6 +47,11 @@ const RecordRoute = RecordRouteImport.update({
 const RealtimeRoute = RealtimeRouteImport.update({
   id: '/realtime',
   path: '/realtime',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PricingRoute = PricingRouteImport.update({
@@ -97,6 +103,7 @@ export interface FileRoutesByFullPath {
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
+  '/profile': typeof ProfileRoute
   '/realtime': typeof RealtimeRoute
   '/record': typeof RecordRoute
   '/register': typeof RegisterRoute
@@ -112,6 +119,7 @@ export interface FileRoutesByTo {
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
+  '/profile': typeof ProfileRoute
   '/realtime': typeof RealtimeRoute
   '/record': typeof RecordRoute
   '/register': typeof RegisterRoute
@@ -128,6 +136,7 @@ export interface FileRoutesById {
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
+  '/profile': typeof ProfileRoute
   '/realtime': typeof RealtimeRoute
   '/record': typeof RecordRoute
   '/register': typeof RegisterRoute
@@ -145,6 +154,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/login'
     | '/pricing'
+    | '/profile'
     | '/realtime'
     | '/record'
     | '/register'
@@ -160,6 +170,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/login'
     | '/pricing'
+    | '/profile'
     | '/realtime'
     | '/record'
     | '/register'
@@ -175,6 +186,7 @@ export interface FileRouteTypes {
     | '/history'
     | '/login'
     | '/pricing'
+    | '/profile'
     | '/realtime'
     | '/record'
     | '/register'
@@ -191,6 +203,7 @@ export interface RootRouteChildren {
   HistoryRoute: typeof HistoryRoute
   LoginRoute: typeof LoginRoute
   PricingRoute: typeof PricingRoute
+  ProfileRoute: typeof ProfileRoute
   RealtimeRoute: typeof RealtimeRoute
   RecordRoute: typeof RecordRoute
   RegisterRoute: typeof RegisterRoute
@@ -234,6 +247,13 @@ declare module '@tanstack/react-router' {
       path: '/realtime'
       fullPath: '/realtime'
       preLoaderRoute: typeof RealtimeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pricing': {
@@ -303,6 +323,7 @@ const rootRouteChildren: RootRouteChildren = {
   HistoryRoute: HistoryRoute,
   LoginRoute: LoginRoute,
   PricingRoute: PricingRoute,
+  ProfileRoute: ProfileRoute,
   RealtimeRoute: RealtimeRoute,
   RecordRoute: RecordRoute,
   RegisterRoute: RegisterRoute,
