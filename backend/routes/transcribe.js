@@ -122,6 +122,7 @@ router.post(
         providerId: result.providerId,
         audioMode: result.audioMode,
         preprocessingApplied: result.preprocessingApplied,
+        preprocessingMethod: result.preprocessingMethod,
         preprocessingWarning: result.preprocessingWarning,
         text: result.text,
         sourceLanguage: result.sourceLanguage,

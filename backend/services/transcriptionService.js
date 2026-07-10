@@ -77,9 +77,127 @@ function safeUnlink(filePath) {
   fs.unlink(filePath, () => {});
 }
 
+function safeRmDir(dirPath) {
+  if (!dirPath) return;
+  fs.rm(dirPath, { recursive: true, force: true }, () => {});
+}
+
+function shouldAttemptDemucs() {
+  const value = String(process.env.DEMUCS_ENABLED || "auto")
+    .trim()
+    .toLowerCase();
+  return !["false", "0", "off", "no", "disabled"].includes(value);
+}
+
+function getDemucsCommandSpec() {
+  if (process.env.DEMUCS_COMMAND) {
+    return { command: process.env.DEMUCS_COMMAND, prefixArgs: [] };
+  }
+  return {
+    command: process.env.DEMUCS_PYTHON_PATH || "python",
+    prefixArgs: ["-m", "demucs"],
+  };
+}
+
+function findFileByName(rootDir, targetName) {
+  if (!fs.existsSync(rootDir)) return null;
+  const stack = [rootDir];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) continue;
+    for (const item of fs.readdirSync(current, { withFileTypes: true })) {
+      const fullPath = path.join(current, item.name);
+      if (item.isDirectory()) {
+        stack.push(fullPath);
+      } else if (item.name.toLowerCase() === targetName.toLowerCase()) {
+        return fullPath;
+      }
+    }
+  }
+  return null;
+}
+
+async function runDemucsVocalIsolation(inputPath) {
+  if (!shouldAttemptDemucs()) {
+    return { vocalsPath: null, warning: null };
+  }
+
+  const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "vbee-demucs-"));
+  const { command, prefixArgs } = getDemucsCommandSpec();
+  const model = String(process.env.DEMUCS_MODEL || "htdemucs").trim();
+  const timeout = Number.parseInt(
+    process.env.DEMUCS_TIMEOUT_MS || `${10 * 60 * 1000}`,
+    10,
+  );
+  const args = [
+    ...prefixArgs,
+    "--two-stems",
+    "vocals",
+    "-n",
+    model,
+    "--out",
+    outputDir,
+    inputPath,
+  ];
+
+  try {
+    await execFileAsync(command, args, {
+      timeout,
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    const vocalsPath = findFileByName(outputDir, "vocals.wav");
+    if (!vocalsPath) {
+      return {
+        vocalsPath: null,
+        outputDir,
+        warning:
+          "Demucs chạy xong nhưng không tìm thấy vocals.wav, backend sẽ dùng ffmpeg filter.",
+      };
+    }
+    return { vocalsPath, outputDir, warning: null };
+  } catch (error) {
+    safeRmDir(outputDir);
+    return {
+      vocalsPath: null,
+      warning:
+        error.code === "ENOENT"
+          ? "Chưa tìm thấy Python/Demucs trên server, backend dùng ffmpeg filter thay thế."
+          : `Demucs chưa xử lý được vocal (${error.message}), backend dùng ffmpeg filter thay thế.`,
+    };
+  }
+}
+
+async function transcodeToSttWav(inputPath, outputPath, filters, timeout) {
+  const ffmpegPath = getFfmpegPath();
+  if (!ffmpegPath) {
+    throw new Error("Chưa có ffmpeg nên chưa thể chuẩn hóa audio.");
+  }
+
+  await execFileAsync(
+    ffmpegPath,
+    [
+      "-hide_banner",
+      "-y",
+      "-i",
+      inputPath,
+      "-vn",
+      "-ac",
+      "1",
+      "-ar",
+      "16000",
+      "-af",
+      filters,
+      "-f",
+      "wav",
+      outputPath,
+    ],
+    { timeout, maxBuffer: 16 * 1024 * 1024 },
+  );
+}
+
 async function prepareMusicAudioForStt(file, filename) {
   if (process.env.AUDIO_PREPROCESSING_ENABLED === "false") {
-    return { file, applied: false, warning: null };
+    return { file, applied: false, method: null, warning: null };
   }
 
   const ffmpegPath = getFfmpegPath();
@@ -87,6 +205,7 @@ async function prepareMusicAudioForStt(file, filename) {
     return {
       file,
       applied: false,
+      method: null,
       warning: "Chưa có ffmpeg nên chưa thể làm rõ vocal trước khi phiên âm.",
     };
   }
@@ -104,29 +223,14 @@ async function prepareMusicAudioForStt(file, filename) {
     process.env.AUDIO_PREPROCESSING_TIMEOUT_MS || `${3 * 60 * 1000}`,
     10,
   );
+  let demucsOutputDir = null;
 
   try {
     fs.writeFileSync(inputPath, file.buffer);
-    await execFileAsync(
-      ffmpegPath,
-      [
-        "-hide_banner",
-        "-y",
-        "-i",
-        inputPath,
-        "-vn",
-        "-ac",
-        "1",
-        "-ar",
-        "16000",
-        "-af",
-        filters,
-        "-f",
-        "wav",
-        outputPath,
-      ],
-      { timeout, maxBuffer: 8 * 1024 * 1024 },
-    );
+    const demucs = await runDemucsVocalIsolation(inputPath);
+    demucsOutputDir = demucs.outputDir;
+    const sourcePath = demucs.vocalsPath || inputPath;
+    await transcodeToSttWav(sourcePath, outputPath, filters, timeout);
 
     const buffer = fs.readFileSync(outputPath);
     return {
@@ -138,12 +242,14 @@ async function prepareMusicAudioForStt(file, filename) {
         mimetype: "audio/wav",
       },
       applied: true,
-      warning: null,
+      method: demucs.vocalsPath ? "demucs" : "ffmpeg",
+      warning: demucs.warning,
     };
   } catch (error) {
     return {
       file,
       applied: false,
+      method: null,
       warning:
         error.message ||
         "Không xử lý được audio bằng ffmpeg, backend sẽ gửi file gốc cho provider.",
@@ -151,6 +257,7 @@ async function prepareMusicAudioForStt(file, filename) {
   } finally {
     safeUnlink(inputPath);
     safeUnlink(outputPath);
+    safeRmDir(demucsOutputDir);
   }
 }
 
@@ -588,6 +695,7 @@ async function transcribeAudio({
       ...result,
       audioMode: normalizedAudioMode,
       preprocessingApplied: preprocessing.applied,
+      preprocessingMethod: preprocessing.method,
       preprocessingWarning: preprocessing.warning,
     };
   }
@@ -604,6 +712,7 @@ async function transcribeAudio({
       ...result,
       audioMode: normalizedAudioMode,
       preprocessingApplied: preprocessing.applied,
+      preprocessingMethod: preprocessing.method,
       preprocessingWarning: preprocessing.warning,
     };
   }
@@ -613,6 +722,7 @@ async function transcribeAudio({
     ...result,
     audioMode: normalizedAudioMode,
     preprocessingApplied: preprocessing.applied,
+    preprocessingMethod: preprocessing.method,
     preprocessingWarning: preprocessing.warning,
   };
 }
@@ -722,6 +832,7 @@ async function transcribeAndSave({
       providerId: result.providerId,
       audioMode: result.audioMode,
       preprocessingApplied: result.preprocessingApplied,
+      preprocessingMethod: result.preprocessingMethod,
       preprocessingWarning: result.preprocessingWarning,
       filename: rows[0].filename,
       fileSize: rows[0].file_size,

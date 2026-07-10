@@ -362,6 +362,7 @@ function UploadPage() {
         translation?: TranslationResult | null;
         translationError?: string;
         preprocessingApplied?: boolean;
+        preprocessingMethod?: "demucs" | "ffmpeg" | string | null;
         preprocessingWarning?: string | null;
       };
       if (!res.ok) {
@@ -375,9 +376,15 @@ function UploadPage() {
       setTranslationError(data.translationError ?? "");
       setAudioProcessingNote(
         data.preprocessingWarning
-          ? `Chế độ bài hát: ${data.preprocessingWarning}`
+          ? data.preprocessingApplied
+            ? `Chế độ bài hát: ${data.preprocessingWarning} Đã dùng ${
+                data.preprocessingMethod === "demucs" ? "Demucs" : "ffmpeg"
+              } để xử lý trước khi chuyển thành văn bản.`
+            : `Chế độ bài hát: ${data.preprocessingWarning}`
           : data.preprocessingApplied
-            ? "Đã làm rõ vocal/giọng hát trước khi chuyển thành văn bản."
+            ? data.preprocessingMethod === "demucs"
+              ? "Đã tách vocal bằng Demucs rồi mới chuyển thành văn bản."
+              : "Đã làm rõ vocal/giọng hát bằng ffmpeg trước khi chuyển thành văn bản."
             : "",
       );
       setDuration(data.duration ?? null);
@@ -776,7 +783,7 @@ function UploadPage() {
                           {
                             value: "song" as const,
                             title: "Bài hát / nhạc nền",
-                            desc: "Thử làm rõ vocal trước khi gửi AI.",
+                            desc: "Tách vocal bằng Demucs nếu có, fallback ffmpeg.",
                           },
                         ].map((item) => (
                           <button
@@ -800,9 +807,9 @@ function UploadPage() {
                       </div>
                       {audioMode === "song" && (
                         <p className="mt-3 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-xs font-semibold leading-5 text-primary">
-                          Lưu ý: đây là chế độ hỗ trợ lấy lời từ nhạc tốt hơn,
-                          nhưng bài có beat lớn hoặc vocal bị lẫn sâu vẫn cần
-                          tách vocal AI chuyên dụng.
+                          Backend sẽ ưu tiên tách vocal bằng Demucs nếu server
+                          đã cài, sau đó chuẩn hóa audio rồi mới gửi AI chuyển
+                          thành văn bản.
                         </p>
                       )}
                     </div>
@@ -889,7 +896,7 @@ function UploadPage() {
                     </p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {audioMode === "song"
-                        ? "Backend sẽ tiền xử lý file bằng ffmpeg trước khi gửi provider speech-to-text."
+                        ? "Backend ưu tiên Demucs để tách vocal; nếu chưa có Demucs sẽ dùng ffmpeg filter làm rõ giọng."
                         : "Hệ thống đang phân tích và chuyển giọng nói thành văn bản."}
                     </p>
                   </div>

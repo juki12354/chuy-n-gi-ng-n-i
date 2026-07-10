@@ -154,6 +154,7 @@ router.post(
         providerId: result.providerId,
         audioMode: result.audioMode,
         preprocessingApplied: result.preprocessingApplied,
+        preprocessingMethod: result.preprocessingMethod,
         preprocessingWarning: result.preprocessingWarning,
         filename: result.filename,
         duration: result.duration,
