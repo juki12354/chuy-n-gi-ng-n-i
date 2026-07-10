@@ -195,6 +195,32 @@ async function transcodeToSttWav(inputPath, outputPath, filters, timeout) {
   );
 }
 
+async function transcodeForDemucs(inputPath, outputPath, timeout) {
+  const ffmpegPath = getFfmpegPath();
+  if (!ffmpegPath) {
+    throw new Error("Chưa có ffmpeg nên chưa thể chuẩn bị audio cho Demucs.");
+  }
+
+  await execFileAsync(
+    ffmpegPath,
+    [
+      "-hide_banner",
+      "-y",
+      "-i",
+      inputPath,
+      "-vn",
+      "-ac",
+      "2",
+      "-ar",
+      "44100",
+      "-f",
+      "wav",
+      outputPath,
+    ],
+    { timeout, maxBuffer: 16 * 1024 * 1024 },
+  );
+}
+
 async function prepareMusicAudioForStt(file, filename) {
   if (process.env.AUDIO_PREPROCESSING_ENABLED === "false") {
     return { file, applied: false, method: null, warning: null };
@@ -215,6 +241,7 @@ async function prepareMusicAudioForStt(file, filename) {
     os.tmpdir(),
     `${tempBase}.${getSafeExtension(file.originalname || filename)}`,
   );
+  const demucsInputPath = path.join(os.tmpdir(), `${tempBase}-demucs.wav`);
   const outputPath = path.join(os.tmpdir(), `${tempBase}-vocal.wav`);
   const filters =
     process.env.SONG_AUDIO_FILTER ||
@@ -227,7 +254,8 @@ async function prepareMusicAudioForStt(file, filename) {
 
   try {
     fs.writeFileSync(inputPath, file.buffer);
-    const demucs = await runDemucsVocalIsolation(inputPath);
+    await transcodeForDemucs(inputPath, demucsInputPath, timeout);
+    const demucs = await runDemucsVocalIsolation(demucsInputPath);
     demucsOutputDir = demucs.outputDir;
     const sourcePath = demucs.vocalsPath || inputPath;
     await transcodeToSttWav(sourcePath, outputPath, filters, timeout);
@@ -256,6 +284,7 @@ async function prepareMusicAudioForStt(file, filename) {
     };
   } finally {
     safeUnlink(inputPath);
+    safeUnlink(demucsInputPath);
     safeUnlink(outputPath);
     safeRmDir(demucsOutputDir);
   }
