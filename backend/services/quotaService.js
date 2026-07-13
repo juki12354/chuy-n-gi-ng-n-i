@@ -79,6 +79,10 @@ const DAILY_USAGE_ALERT_SECONDS = getEnvInt(
   "DAILY_USAGE_ALERT_SECONDS",
   60 * 60,
 );
+const DAILY_USAGE_ALERT_EMAIL_COOLDOWN_SECONDS = getEnvInt(
+  "DAILY_USAGE_ALERT_EMAIL_COOLDOWN_SECONDS",
+  24 * 60 * 60,
+);
 const BACKEND_URL =
   process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3001}`;
 
@@ -250,11 +254,20 @@ async function issueUsageAlert(userId) {
          usage_alert_token = $1,
          usage_alert_sent_at = NOW()
      WHERE id = $2
+       AND usage_alert_confirmed_at::date IS DISTINCT FROM CURRENT_DATE
+       AND (
+         usage_alert_required = FALSE
+         OR usage_alert_date IS DISTINCT FROM CURRENT_DATE
+         OR usage_alert_sent_at IS NULL
+         OR usage_alert_sent_at < NOW() - ($3 * INTERVAL '1 second')
+       )
      RETURNING email`,
-    [token, userId],
+    [token, userId, DAILY_USAGE_ALERT_EMAIL_COOLDOWN_SECONDS],
   );
 
-  if (!rows[0]) throw createHttpError(404, "Khong tim thay nguoi dung");
+  if (!rows[0]) {
+    return { emailSent: false, skipped: true };
+  }
 
   const confirmUrl = getUsageAlertConfirmUrl(token);
   let emailSent = false;

@@ -18,6 +18,7 @@ const {
   getUserSettings,
   parseDictionaryKeywords,
 } = require("../services/userSettingsService");
+const { transcriptionQueue } = require("../services/jobQueue");
 
 const router = express.Router();
 
@@ -84,6 +85,7 @@ router.get("/health", (_req, res) => {
     service: "Vbee API",
     version: "v1",
     transcriptionProvider: getTranscriptionProvider(),
+    transcriptionQueue: transcriptionQueue.stats(),
   });
 });
 
@@ -127,22 +129,29 @@ router.post(
         expectedDurationSeconds,
       });
 
-      const result = await transcribeAndSave({
+      const result = await transcriptionQueue.addAndWait({
+        type: "public-transcription",
         userId: req.user.id,
-        file: req.file,
-        source,
-        language,
-        audioMode,
-        translateTo,
-        dictionaryKeywords,
-        transcriptionSettings: userSettings.transcriptionSettings,
-        speakerLabels:
-          req.body.speakerLabels === "true" || req.body.speakerLabels === true,
-        validateResult: ({ duration }) =>
-          validateAfterTranscription({
+        data: null,
+        handler: () =>
+          transcribeAndSave({
             userId: req.user.id,
-            durationSeconds: duration,
+            file: req.file,
             source,
+            language,
+            audioMode,
+            translateTo,
+            dictionaryKeywords,
+            transcriptionSettings: userSettings.transcriptionSettings,
+            speakerLabels:
+              req.body.speakerLabels === "true" ||
+              req.body.speakerLabels === true,
+            validateResult: ({ duration }) =>
+              validateAfterTranscription({
+                userId: req.user.id,
+                durationSeconds: duration,
+                source,
+              }),
           }),
       });
       const quota = await getQuotaStatus(req.user.id);

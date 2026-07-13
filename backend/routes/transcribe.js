@@ -25,6 +25,7 @@ const {
   normalizeTranslateTarget,
   translateTranscript,
 } = require("../services/translationService");
+const { transcriptionQueue } = require("../services/jobQueue");
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
@@ -51,92 +52,152 @@ function authMiddleware(req, res, next) {
   }
 }
 
+function formatTranscriptionResponse(result, quota) {
+  return {
+    id: result.id,
+    provider: result.provider,
+    providerId: result.providerId,
+    audioMode: result.audioMode,
+    preprocessingApplied: result.preprocessingApplied,
+    preprocessingMethod: result.preprocessingMethod,
+    preprocessingWarning: result.preprocessingWarning,
+    text: result.text,
+    sourceLanguage: result.sourceLanguage,
+    translation: result.translation,
+    translationError: result.translationError,
+    duration: result.duration,
+    processingSeconds: result.processingSeconds,
+    filename: result.filename,
+    words: result.words,
+    segments: result.segments,
+    speaker_names: result.speakerNames,
+    createdAt: result.createdAt,
+    quota,
+  };
+}
+
+async function processTranscriptionJob({ userId, file, body }) {
+  const source =
+    body.source === "recording" || file?.originalname?.startsWith("recording.")
+      ? "recording"
+      : "upload";
+  const expectedDurationSeconds = body.expectedDuration
+    ? Number(body.expectedDuration)
+    : null;
+  const language = body.language || body.transcriptionLanguage || "auto";
+  const audioMode =
+    body.audioMode === "song" || body.audioMode === "music" ? "song" : "speech";
+  const translateTo = body.translateTo || body.targetLanguage || "";
+  const userSettings = await getUserSettings(userId);
+  const dictionaryKeywords = parseDictionaryKeywords(
+    userSettings.customDictionary,
+  );
+
+  await validateBeforeTranscription({
+    userId,
+    file,
+    source,
+    expectedDurationSeconds,
+  });
+
+  const result = await transcribeAndSave({
+    userId,
+    file,
+    source,
+    language,
+    audioMode,
+    translateTo,
+    dictionaryKeywords,
+    transcriptionSettings: userSettings.transcriptionSettings,
+    speakerLabels: body.speakerLabels === "true" || body.speakerLabels === true,
+    validateResult: ({ duration }) =>
+      validateAfterTranscription({
+        userId,
+        durationSeconds: duration,
+        source,
+      }),
+  });
+  const quota = await getQuotaStatus(userId);
+
+  return formatTranscriptionResponse(result, quota);
+}
+
+function uploadAudio(req, res, next) {
+  upload.single("audio")(req, res, (err) => {
+    if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+      return res
+        .status(400)
+        .json({ error: `File qua lon (toi da ${MAX_SIZE_MB}MB)` });
+    }
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}
+
+router.post("/jobs", authMiddleware, uploadAudio, async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "Vui long chon file am thanh" });
+    }
+
+    const job = transcriptionQueue.add({
+      type: "transcription",
+      userId: req.user.id,
+      data: {
+        userId: req.user.id,
+        file: {
+          ...req.file,
+          buffer: Buffer.from(req.file.buffer),
+        },
+        body: { ...req.body },
+      },
+      handler: processTranscriptionJob,
+    });
+
+    return res.status(202).json({
+      job,
+      queue: transcriptionQueue.stats(),
+    });
+  } catch (err) {
+    console.error("Create transcription job error:", err);
+    return res.status(err.statusCode || 500).json({
+      error: err.message || "Khong the tao job chuyen doi am thanh",
+    });
+  }
+});
+
+router.get("/jobs", authMiddleware, (req, res) => {
+  const limit = Math.min(Number.parseInt(req.query.limit || "20", 10) || 20, 50);
+  return res.json({
+    jobs: transcriptionQueue.listByUser(req.user.id, limit),
+    queue: transcriptionQueue.stats(),
+  });
+});
+
+router.get("/jobs/:jobId", authMiddleware, (req, res) => {
+  const job = transcriptionQueue.get(req.params.jobId, req.user.id);
+  if (!job) return res.status(404).json({ error: "Khong tim thay job" });
+  return res.json({ job, queue: transcriptionQueue.stats() });
+});
+
 // POST /api/transcribe — nhận file âm thanh, gọi dịch vụ phiên âm, trả về văn bản
 router.post(
   "/",
   authMiddleware,
-  (req, res, next) => {
-    upload.single("audio")(req, res, (err) => {
-      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-        return res
-          .status(400)
-          .json({ error: `File quá lớn (tối đa ${MAX_SIZE_MB}MB)` });
-      }
-      if (err) return res.status(400).json({ error: err.message });
-      next();
-    });
-  },
+  uploadAudio,
   async (req, res) => {
     try {
-      const source =
-        req.body.source === "recording" ||
-        req.file?.originalname?.startsWith("recording.")
-          ? "recording"
-          : "upload";
-      const expectedDurationSeconds = req.body.expectedDuration
-        ? Number(req.body.expectedDuration)
-        : null;
-      const language =
-        req.body.language || req.body.transcriptionLanguage || "auto";
-      const audioMode =
-        req.body.audioMode === "song" || req.body.audioMode === "music"
-          ? "song"
-          : "speech";
-      const translateTo =
-        req.body.translateTo || req.body.targetLanguage || "";
-      const userSettings = await getUserSettings(req.user.id);
-      const dictionaryKeywords = parseDictionaryKeywords(
-        userSettings.customDictionary,
-      );
-
-      await validateBeforeTranscription({
+      const payload = await transcriptionQueue.addAndWait({
+        type: "transcription",
         userId: req.user.id,
-        file: req.file,
-        source,
-        expectedDurationSeconds,
+        data: {
+          userId: req.user.id,
+          file: req.file,
+          body: req.body,
+        },
+        handler: processTranscriptionJob,
       });
-
-      const result = await transcribeAndSave({
-        userId: req.user.id,
-        file: req.file,
-        source,
-        language,
-        audioMode,
-        translateTo,
-        dictionaryKeywords,
-        transcriptionSettings: userSettings.transcriptionSettings,
-        speakerLabels:
-          req.body.speakerLabels === "true" || req.body.speakerLabels === true,
-        validateResult: ({ duration }) =>
-          validateAfterTranscription({
-            userId: req.user.id,
-            durationSeconds: duration,
-            source,
-          }),
-      });
-      const quota = await getQuotaStatus(req.user.id);
-
-      return res.json({
-        id: result.id,
-        provider: result.provider,
-        providerId: result.providerId,
-        audioMode: result.audioMode,
-        preprocessingApplied: result.preprocessingApplied,
-        preprocessingMethod: result.preprocessingMethod,
-        preprocessingWarning: result.preprocessingWarning,
-        text: result.text,
-        sourceLanguage: result.sourceLanguage,
-        translation: result.translation,
-        translationError: result.translationError,
-        duration: result.duration,
-        processingSeconds: result.processingSeconds,
-        filename: result.filename,
-        words: result.words,
-        segments: result.segments,
-        speaker_names: result.speakerNames,
-        createdAt: result.createdAt,
-        quota,
-      });
+      return res.json(payload);
     } catch (err) {
       console.error("Transcribe error:", err);
       return res

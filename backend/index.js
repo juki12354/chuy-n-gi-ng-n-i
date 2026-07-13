@@ -13,6 +13,7 @@ const settingsRoutes = require("./routes/settings");
 const supportRoutes = require("./routes/support");
 const initDatabase = require("./initDb");
 const { getTranscriptionProvider } = require("./services/transcriptionService");
+const { transcriptionQueue } = require("./services/jobQueue");
 
 const app = express();
 
@@ -50,6 +51,7 @@ app.get("/api/health", (_req, res) => {
     status: "ok",
     message: "Backend đang chạy",
     transcriptionProvider: getTranscriptionProvider(),
+    transcriptionQueue: transcriptionQueue.stats(),
   });
 });
 
