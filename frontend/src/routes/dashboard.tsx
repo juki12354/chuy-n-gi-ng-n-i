@@ -131,7 +131,7 @@ function DashboardPage() {
   const [profileSuccess, setProfileSuccess] = useState(false);
   const [folderOpen, setFolderOpen] = useState(false);
   const [folderName, setFolderName] = useState("Dự án mới");
-  const [activeFolder, setActiveFolder] = useState("My workspace");
+  const [activeFolder, setActiveFolder] = useState("Dự án mới");
   const [actionDialog, setActionDialog] = useState<ActionDialogState | null>(
     null,
   );
@@ -304,15 +304,18 @@ function DashboardPage() {
 
   function openFeature(label: string) {
     const normalized = label.toLowerCase();
-    if (normalized.includes("transcription")) {
+    if (
+      normalized.includes("transcription") ||
+      normalized.includes("chuyển giọng nói")
+    ) {
       void navigate({ to: "/transcription-settings" });
       return;
     }
-    if (normalized.includes("dictionary")) {
+    if (normalized.includes("dictionary") || normalized.includes("từ điển")) {
       void navigate({ to: "/custom-dictionary" });
       return;
     }
-    if (normalized.includes("upload")) {
+    if (normalized.includes("upload") || normalized.includes("tải lên")) {
       void navigate({ to: "/upload" });
       return;
     }
@@ -330,21 +333,25 @@ function DashboardPage() {
       });
       return;
     }
-    if (normalized.includes("analysis")) {
+    if (normalized.includes("analysis") || normalized.includes("phân tích")) {
       setActionDialog({
         title: label,
         description:
-          "AI analysis sẽ dùng transcript đã tạo để tóm tắt, trích ý chính và tìm chủ đề. Trước mắt bạn có thể mở lịch sử để chọn transcript cần phân tích.",
+          "Phân tích AI sẽ dùng bản chép lời đã tạo để tóm tắt, trích ý chính và tìm chủ đề. Trước mắt bạn có thể mở lịch sử để chọn bản chép lời cần phân tích.",
         ctaLabel: "Mở lịch sử",
         to: "/history",
       });
       return;
     }
-    if (normalized.includes("help") || normalized.includes("video")) {
+    if (
+      normalized.includes("help") ||
+      normalized.includes("video") ||
+      normalized.includes("hỗ trợ")
+    ) {
       setActionDialog({
         title: label,
         description:
-          "Bạn có thể dùng trang ghi âm để mở bảng trợ giúp nổi, hoặc quay lại upload/record để bắt đầu workflow.",
+          "Bạn có thể dùng trang ghi âm để mở bảng trợ giúp, hoặc quay lại tải file hoặc ghi âm để bắt đầu.",
         ctaLabel: "Mở ghi âm",
         to: "/record",
       });
@@ -498,12 +505,12 @@ function DashboardPage() {
               <div>
                 <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-black text-primary">
                   <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                  Workspace sẵn sàng
+                  Không gian làm việc sẵn sàng
                 </div>
                 <div className="flex items-center gap-3">
                   <Heart className="h-10 w-10 text-primary" />
                   <h1 className="text-3xl font-light tracking-tight text-foreground md:text-5xl">
-                    Welcome, {user.firstName}
+                    Chào mừng, {user.firstName}
                   </h1>
                 </div>
               </div>
@@ -518,7 +525,7 @@ function DashboardPage() {
 
             <div className="mb-3 flex items-center justify-center rounded-md border border-border bg-card/75 px-4 py-2 text-sm font-bold text-foreground/85 shadow-soft">
               <Home className="mr-2 h-4 w-4 text-primary" />
-              Home
+              Trang chủ
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:flex">
@@ -527,14 +534,14 @@ function DashboardPage() {
                 className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
               >
                 <Upload className="h-4 w-4" />
-                UPLOAD
+                TẢI FILE
               </Link>
               <button
                 onClick={() => setFolderOpen(true)}
                 className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-card/70 px-5 py-3 text-sm font-black text-foreground transition hover:border-primary/50 hover:text-primary"
               >
                 <FolderPlus className="h-4 w-4" />
-                NEW FOLDER
+                THƯ MỤC MỚI
               </button>
               <Link
                 to="/record"
@@ -560,7 +567,7 @@ function DashboardPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">
-                    Folder Name
+                    DỰ ÁN
                   </p>
                   <div className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                     <Folder className="h-4 w-4 text-primary" />
@@ -568,7 +575,7 @@ function DashboardPage() {
                   </div>
                 </div>
                 <div className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-                  {history.length} items
+                  {history.length} tệp
                 </div>
               </div>
             </div>
@@ -607,7 +614,7 @@ function DashboardPage() {
             )}
 
             <div className="border-t border-border bg-background/35 px-5 py-4 text-center text-sm font-black text-primary">
-              {history.length} items,{" "}
+              {history.length} tệp,{" "}
               {formatDuration(
                 history.reduce((sum, item) => sum + (item.duration ?? 0), 0),
               )}
@@ -616,21 +623,21 @@ function DashboardPage() {
 
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             {[
-              [Languages, "54+ ngôn ngữ", "Transcribe và dịch nhiều ngôn ngữ"],
+              [Languages, "54+ ngôn ngữ", "Chuyển giọng nói và dịch nhiều ngôn ngữ"],
               [
                 AudioLines,
-                "Word timestamps",
-                "Highlight theo từng từ khi phát audio",
+                "Mốc thời gian từng từ",
+                "Đánh dấu theo từng từ khi phát âm thanh",
               ],
               [
                 Radio,
-                "Realtime speech",
-                "Nói trực tiếp và lưu transcript vào lịch sử",
+                "Chuyển giọng nói trực tiếp",
+                "Nói trực tiếp và lưu bản chép lời vào lịch sử",
               ],
               [
                 Download,
-                "Export nhanh",
-                "DOCX, audio và transcript đã chỉnh sửa",
+                "Xuất nhanh",
+                "DOCX, âm thanh và bản chép lời đã chỉnh sửa",
               ],
             ].map(([Icon, title, desc]) => (
               <div
@@ -662,7 +669,7 @@ function DashboardPage() {
                 </span>
               )}
               <h2 className="text-2xl font-bold leading-tight">
-                Good to see you,
+                Xin chào,
                 <br />
                 {user.firstName}
               </h2>
@@ -673,33 +680,33 @@ function DashboardPage() {
             </div>
 
             <DashboardSideSection
-              title="CUSTOMIZE"
+              title="TÙY CHỈNH"
               items={[
-                [Settings, "Transcription settings"],
-                [BookOpen, "Custom dictionary"],
-                [UploadCloud, "Upload settings"],
+                [Settings, "Cài đặt chuyển giọng nói"],
+                [BookOpen, "Từ điển riêng"],
+                [UploadCloud, "Cài đặt tải lên"],
               ]}
               onAction={openFeature}
             />
             <DashboardSideSection
-              title="AI ANALYSIS"
-              items={[[SlidersHorizontal, "AI analysis settings"]]}
+              title="PHÂN TÍCH AI"
+              items={[[SlidersHorizontal, "Cài đặt phân tích AI"]]}
               onAction={openFeature}
             />
             <DashboardSideSection
-              title="INTEGRATIONS"
+              title="TÍCH HỢP"
               items={[
-                [FileAudio, "Zoom integration"],
-                [Mic, "Microsoft Teams integration"],
-                [Zap, "Zapier automation"],
+                [FileAudio, "Tích hợp Zoom"],
+                [Mic, "Tích hợp Microsoft Teams"],
+                [Zap, "Tự động hóa Zapier"],
               ]}
               onAction={openFeature}
             />
             <DashboardSideSection
-              title="NEED HELP?"
+              title="HỖ TRỢ"
               items={[
-                [BookOpen, "Introduction videos"],
-                [MessageCircle, "Help center"],
+                [BookOpen, "Video hướng dẫn"],
+                [MessageCircle, "Trung tâm hỗ trợ"],
               ]}
               onAction={openFeature}
             />
@@ -707,9 +714,9 @@ function DashboardPage() {
             <button
               onClick={() =>
                 setActionDialog({
-                  title: "Refer a friend",
+                  title: "Giới thiệu bạn bè",
                   description:
-                    "Chương trình giới thiệu bạn bè sẽ cấp phút miễn phí sau khi người được mời đăng ký và dùng thử. Đây là điểm bấm tương ứng với thẻ referral trong Sonix.",
+                    "Chương trình giới thiệu bạn bè sẽ cấp phút miễn phí sau khi người được mời đăng ký và dùng thử.",
                   ctaLabel: "Mở trang chủ",
                   to: "/",
                 })
@@ -719,9 +726,9 @@ function DashboardPage() {
               <div className="flex items-center gap-3">
                 <Gift className="h-8 w-8 text-primary" />
                 <p className="text-sm font-black leading-5 text-primary">
-                  REFER A FRIEND AND
+                  GIỚI THIỆU BẠN BÈ
                   <br />
-                  GET 100 FREE MINUTES
+                  NHẬN 100 PHÚT MIỄN PHÍ
                 </p>
               </div>
             </button>
@@ -953,32 +960,32 @@ function CustomerJourneyPanel() {
     {
       icon: UploadCloud,
       step: "01",
-      title: "Tạo transcript",
-      desc: "Upload audio/video hoặc ghi âm trực tiếp để bắt đầu như Sonix.",
+      title: "Tạo bản chép lời",
+      desc: "Tải file âm thanh, video hoặc ghi âm trực tiếp để bắt đầu.",
       cta: "Tải file",
       to: "/upload",
     },
     {
       icon: Radio,
       step: "02",
-      title: "Nói realtime",
+      title: "Nói trực tiếp",
       desc: "Dùng khi cần ghi nhanh cuộc họp, ý tưởng hoặc phỏng vấn đang diễn ra.",
-      cta: "Mở realtime",
+      cta: "Mở ghi âm trực tiếp",
       to: "/realtime",
     },
     {
       icon: Languages,
       step: "03",
-      title: "Sửa, dịch, xuất file",
-      desc: "Mở transcript đã tạo để copy, tải DOCX/TXT và xem bản dịch.",
+      title: "Sửa, dịch, xuất tệp",
+      desc: "Mở bản chép lời đã tạo để sao chép, tải DOCX/TXT và xem bản dịch.",
       cta: "Xem lịch sử",
       to: "/history",
     },
     {
       icon: Clock,
       step: "04",
-      title: "Theo dõi quota",
-      desc: "Khi gần hết thời gian dùng, chọn gói phù hợp để xử lý tiếp.",
+      title: "Theo dõi hạn mức",
+      desc: "Khi gần hết thời gian sử dụng, chọn gói phù hợp để tiếp tục xử lý.",
       cta: "Xem gói cước",
       to: "/pricing",
     },
@@ -996,7 +1003,7 @@ function CustomerJourneyPanel() {
           </h2>
         </div>
         <span className="w-fit rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-black text-primary">
-          Vbee flow
+          Luồng Vbee
         </span>
       </div>
 
@@ -1044,22 +1051,22 @@ function WorkspaceFileRow({ item }: { item: HistoryItem }) {
       className="block border-t border-border px-5 py-5 transition hover:bg-primary/5"
     >
       <div className="grid gap-y-4 text-sm sm:grid-cols-[130px_minmax(0,1fr)]">
-        <p className="font-black text-muted-foreground">File Name</p>
+        <p className="font-black text-muted-foreground">Tên tệp</p>
         <span className="flex min-w-0 items-center gap-2 font-semibold text-primary">
           <Icon className="h-4 w-4 shrink-0" />
           <span className="truncate">{item.filename}</span>
         </span>
 
-        <p className="font-black text-muted-foreground">Status</p>
+        <p className="font-black text-muted-foreground">Trạng thái</p>
         <span className="inline-flex w-fit min-w-36 items-center justify-center gap-2 rounded-md bg-emerald-500 px-4 py-2 text-xs font-black text-white">
           <Check className="h-3.5 w-3.5" />
-          Transcribed
+          Đã chuyển thành văn bản
         </span>
 
-        <p className="font-black text-muted-foreground">Duration</p>
+        <p className="font-black text-muted-foreground">Thời lượng</p>
         <p className="font-semibold">{formatDuration(item.duration)}</p>
 
-        <p className="font-black text-muted-foreground">Date Created</p>
+        <p className="font-black text-muted-foreground">Ngày tạo</p>
         <p className="font-semibold">{formatDate(item.created_at)}</p>
       </div>
     </Link>

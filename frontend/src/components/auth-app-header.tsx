@@ -110,7 +110,7 @@ export function AuthenticatedHeader() {
               <DropdownMenuItem asChild className="gap-2 cursor-pointer">
                 <Link to="/dashboard">
                   <LayoutDashboard className="h-4 w-4 text-[#21104a]" />
-                  Workspace
+                  Không gian làm việc
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
