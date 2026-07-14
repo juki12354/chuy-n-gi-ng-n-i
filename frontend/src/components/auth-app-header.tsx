@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   History,
+  LayoutDashboard,
   LogOut,
   Menu,
   Mic,
@@ -105,6 +106,13 @@ export function AuthenticatedHeader() {
                   {user.email}
                 </p>
               </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild className="gap-2 cursor-pointer">
+                <Link to="/dashboard">
+                  <LayoutDashboard className="h-4 w-4 text-[#21104a]" />
+                  Workspace
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="gap-2 cursor-pointer text-destructive hover:bg-destructive/10 focus:bg-destructive/10"
