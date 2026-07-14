@@ -20,6 +20,7 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HistoryRouteImport } from './routes/history'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CustomDictionaryRouteImport } from './routes/custom-dictionary'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as ApiRouteImport } from './routes/api'
@@ -82,6 +83,11 @@ const HistoryRoute = HistoryRouteImport.update({
   path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CustomDictionaryRoute = CustomDictionaryRouteImport.update({
   id: '/custom-dictionary',
   path: '/custom-dictionary',
@@ -119,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/api': typeof ApiRoute
   '/contact': typeof ContactRoute
   '/custom-dictionary': typeof CustomDictionaryRoute
+  '/dashboard': typeof DashboardRoute
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/api': typeof ApiRoute
   '/contact': typeof ContactRoute
   '/custom-dictionary': typeof CustomDictionaryRoute
+  '/dashboard': typeof DashboardRoute
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
@@ -158,6 +166,7 @@ export interface FileRoutesById {
   '/api': typeof ApiRoute
   '/contact': typeof ContactRoute
   '/custom-dictionary': typeof CustomDictionaryRoute
+  '/dashboard': typeof DashboardRoute
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
@@ -179,6 +188,7 @@ export interface FileRouteTypes {
     | '/api'
     | '/contact'
     | '/custom-dictionary'
+    | '/dashboard'
     | '/history'
     | '/login'
     | '/pricing'
@@ -198,6 +208,7 @@ export interface FileRouteTypes {
     | '/api'
     | '/contact'
     | '/custom-dictionary'
+    | '/dashboard'
     | '/history'
     | '/login'
     | '/pricing'
@@ -217,6 +228,7 @@ export interface FileRouteTypes {
     | '/api'
     | '/contact'
     | '/custom-dictionary'
+    | '/dashboard'
     | '/history'
     | '/login'
     | '/pricing'
@@ -237,6 +249,7 @@ export interface RootRouteChildren {
   ApiRoute: typeof ApiRoute
   ContactRoute: typeof ContactRoute
   CustomDictionaryRoute: typeof CustomDictionaryRoute
+  DashboardRoute: typeof DashboardRoute
   HistoryRoute: typeof HistoryRoute
   LoginRoute: typeof LoginRoute
   PricingRoute: typeof PricingRoute
@@ -330,6 +343,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/custom-dictionary': {
       id: '/custom-dictionary'
       path: '/custom-dictionary'
@@ -381,6 +401,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiRoute: ApiRoute,
   ContactRoute: ContactRoute,
   CustomDictionaryRoute: CustomDictionaryRoute,
+  DashboardRoute: DashboardRoute,
   HistoryRoute: HistoryRoute,
   LoginRoute: LoginRoute,
   PricingRoute: PricingRoute,

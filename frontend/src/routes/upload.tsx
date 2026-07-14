@@ -14,6 +14,7 @@ import {
   FolderPlus,
   HardDrive,
   Heart,
+  Home,
   Info,
   Languages,
   Link2,
@@ -676,6 +677,14 @@ function UploadPage() {
                 Chào mừng, {user.firstName}
               </h1>
             </div>
+
+            <Link
+              to="/upload"
+              className="mb-3 flex items-center justify-center rounded-md border border-border bg-card/75 px-4 py-2 text-sm font-bold text-foreground/85 shadow-soft transition hover:border-primary/45 hover:bg-primary/5 hover:text-primary"
+            >
+              <Home className="mr-2 h-4 w-4 text-primary" />
+              Home
+            </Link>
 
             <div className="grid grid-cols-[1fr_1fr_44px] gap-2 sm:flex">
               <button
