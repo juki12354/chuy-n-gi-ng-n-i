@@ -106,6 +106,13 @@ export function AuthenticatedHeader() {
                 </p>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild className="gap-2 cursor-pointer">
+                <Link to="/profile">
+                  <User className="h-4 w-4 text-primary" />
+                  Hồ sơ
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="gap-2 cursor-pointer text-destructive hover:bg-destructive/10 focus:bg-destructive/10"
                 onSelect={handleLogout}

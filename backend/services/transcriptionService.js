@@ -396,6 +396,94 @@ function normalizeDeepgramWords(response) {
   }));
 }
 
+function normalizeSpeakerId(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const text = String(value).trim();
+  return text || null;
+}
+
+function buildSegmentsFromWords(words = []) {
+  if (!Array.isArray(words) || words.length === 0) return [];
+
+  const segments = [];
+  let current = [];
+  let currentSpeaker = normalizeSpeakerId(words[0]?.speaker);
+
+  const pushCurrent = () => {
+    if (current.length === 0) return;
+    segments.push({
+      speaker: currentSpeaker,
+      text: current.map((word) => word.text).join(" ").trim(),
+      start: Number(current[0]?.start ?? 0),
+      end: Number(current[current.length - 1]?.end ?? 0),
+      words: current,
+    });
+    current = [];
+  };
+
+  for (const word of words) {
+    const speaker = normalizeSpeakerId(word?.speaker);
+    const speakerChanged = current.length > 0 && speaker !== currentSpeaker;
+    const duration = current.length > 0 ? Number(word.end ?? 0) - Number(current[0]?.start ?? 0) : 0;
+    const endsSentence = /[.!?…]$/.test(String(word.text || ""));
+
+    if (speakerChanged || current.length >= 40 || duration >= 12_000) {
+      pushCurrent();
+      currentSpeaker = speaker;
+    }
+
+    if (current.length === 0) currentSpeaker = speaker;
+    current.push(word);
+
+    if (endsSentence) {
+      pushCurrent();
+      currentSpeaker = null;
+    }
+  }
+
+  pushCurrent();
+  return segments.filter((segment) => segment.text);
+}
+
+function buildSegmentsFromAssemblyUtterances(utterances = []) {
+  if (!Array.isArray(utterances) || utterances.length === 0) return [];
+  return utterances
+    .map((utterance) => ({
+      speaker: normalizeSpeakerId(utterance.speaker),
+      text: String(utterance.text || "").trim(),
+      start: Number(utterance.start ?? 0),
+      end: Number(utterance.end ?? 0),
+      words: Array.isArray(utterance.words) ? utterance.words : [],
+    }))
+    .filter((segment) => segment.text);
+}
+
+function normalizeSonixSegments(jsonTranscript) {
+  const segments = Array.isArray(jsonTranscript?.transcript)
+    ? jsonTranscript.transcript
+    : [];
+
+  return segments
+    .map((segment) => {
+      const words = Array.isArray(segment.words)
+        ? segment.words.map((word) => ({
+            text: word.text || "",
+            start: Math.round(Number(word.start_time || 0) * 1000),
+            end: Math.round(Number(word.end_time || word.start_time || 0) * 1000),
+            speaker: normalizeSpeakerId(segment.speaker),
+          }))
+        : [];
+      return {
+        speaker: normalizeSpeakerId(segment.speaker),
+        text: words.map((word) => word.text).join(" ").trim(),
+        start: Number(words[0]?.start ?? 0),
+        end: Number(words[words.length - 1]?.end ?? 0),
+        words,
+      };
+    })
+    .filter((segment) => segment.text);
+}
+
 function buildTextFromDeepgram(response, speakerLabels) {
   const alternative = response?.results?.channels?.[0]?.alternatives?.[0];
   if (!alternative) return "";
@@ -493,6 +581,7 @@ async function transcribeWithDeepgram({
       null,
     text: buildTextFromDeepgram(body, speakerLabels),
     words: normalizeDeepgramWords(body),
+    segments: buildSegmentsFromWords(normalizeDeepgramWords(body)),
   };
 }
 
@@ -639,6 +728,7 @@ async function transcribeWithSonix({
   );
 
   const words = normalizeSonixWords(jsonTranscript);
+  const segments = normalizeSonixSegments(jsonTranscript);
   const text = buildTextFromSonixJson(jsonTranscript, speakerLabels);
 
   return {
@@ -647,6 +737,7 @@ async function transcribeWithSonix({
     duration: media.duration || null,
     text,
     words,
+    segments,
   };
 }
 
@@ -672,12 +763,18 @@ async function transcribeWithAssemblyAI({ file, speakerLabels }) {
           .join("\n\n")
       : transcript.text || "";
 
+  const utteranceSegments = buildSegmentsFromAssemblyUtterances(transcript.utterances);
+
   return {
     provider: "assemblyai",
     providerId: transcript.id || null,
     duration: transcript.audio_duration || null,
     text,
     words: transcript.words || [],
+    segments:
+      utteranceSegments.length > 0
+        ? utteranceSegments
+        : buildSegmentsFromWords(transcript.words || []),
   };
 }
 
@@ -820,11 +917,11 @@ async function transcribeAndSave({
 
     const { rows } = await pool.query(
       `INSERT INTO transcriptions (
-         user_id, filename, file_size, duration, processing_seconds, text, words, audio_filename,
+         user_id, filename, file_size, duration, processing_seconds, text, words, segments, speaker_names, audio_filename,
          source_language, translated_text, translation_target_language, translation_provider
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-       RETURNING id, filename, file_size, duration, processing_seconds, text, words, audio_filename,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '{}'::jsonb, $9, $10, $11, $12, $13)
+       RETURNING id, filename, file_size, duration, processing_seconds, text, words, segments, speaker_names, audio_filename,
          source_language, translated_text, translation_target_language, translation_provider, created_at`,
       [
         userId,
@@ -834,6 +931,7 @@ async function transcribeAndSave({
         processingSeconds,
         result.text,
         JSON.stringify(result.words || []),
+        JSON.stringify(result.segments || buildSegmentsFromWords(result.words || [])),
         savedAudioFilename,
         result.detectedLanguage || sourceLanguage,
         translation?.text || null,
@@ -856,6 +954,8 @@ async function transcribeAndSave({
       processingSeconds: rows[0].processing_seconds,
       text: rows[0].text,
       words: rows[0].words || [],
+      segments: rows[0].segments || [],
+      speakerNames: rows[0].speaker_names || {},
       sourceLanguage: rows[0].source_language,
       translation: rows[0].translated_text
         ? {

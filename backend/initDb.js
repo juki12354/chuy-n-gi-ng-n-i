@@ -17,6 +17,12 @@ async function initDatabase() {
       plan VARCHAR(20) NOT NULL DEFAULT 'free',
       quota_seconds INTEGER NOT NULL DEFAULT ${FREE_PLAN_SECONDS},
       quota_alert_seconds INTEGER NOT NULL DEFAULT ${DEFAULT_QUOTA_ALERT_SECONDS},
+      usage_alert_daily_seconds INTEGER NOT NULL DEFAULT 0,
+      usage_alert_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      usage_alert_required BOOLEAN NOT NULL DEFAULT FALSE,
+      usage_alert_token VARCHAR(255),
+      usage_alert_sent_at TIMESTAMP WITH TIME ZONE,
+      usage_alert_confirmed_at TIMESTAMP WITH TIME ZONE,
       plan_started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       plan_expires_at TIMESTAMP WITH TIME ZONE,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -32,9 +38,21 @@ async function initDatabase() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan VARCHAR(20) NOT NULL DEFAULT 'free';`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS quota_seconds INTEGER NOT NULL DEFAULT ${FREE_PLAN_SECONDS};`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS quota_alert_seconds INTEGER NOT NULL DEFAULT ${DEFAULT_QUOTA_ALERT_SECONDS};`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS usage_alert_daily_seconds INTEGER NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS usage_alert_date DATE NOT NULL DEFAULT CURRENT_DATE;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS usage_alert_required BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS usage_alert_token VARCHAR(255);`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS usage_alert_sent_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS usage_alert_confirmed_at TIMESTAMP WITH TIME ZONE;`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_expires_at TIMESTAMP WITH TIME ZONE;`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();`);
+  await pool.query(`
+    UPDATE users
+    SET usage_alert_daily_seconds = COALESCE(usage_alert_daily_seconds, 0),
+        usage_alert_date = COALESCE(usage_alert_date, CURRENT_DATE),
+        usage_alert_required = COALESCE(usage_alert_required, FALSE)
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS transcriptions (
@@ -46,6 +64,8 @@ async function initDatabase() {
       processing_seconds NUMERIC,
       text TEXT NOT NULL,
       words JSONB DEFAULT '[]'::jsonb,
+      segments JSONB DEFAULT '[]'::jsonb,
+      speaker_names JSONB DEFAULT '{}'::jsonb,
       audio_filename VARCHAR(255),
       source_language VARCHAR(20),
       translated_text TEXT,
@@ -59,6 +79,8 @@ async function initDatabase() {
   await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS duration NUMERIC;`);
   await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS processing_seconds NUMERIC;`);
   await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS words JSONB DEFAULT '[]'::jsonb;`);
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS segments JSONB DEFAULT '[]'::jsonb;`);
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS speaker_names JSONB DEFAULT '{}'::jsonb;`);
   await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS audio_filename VARCHAR(255);`);
   await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS source_language VARCHAR(20);`);
   await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS translated_text TEXT;`);
