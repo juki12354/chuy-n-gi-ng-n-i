@@ -5,36 +5,36 @@ const QUOTE_ROTATION_MS = 5000;
 
 const PHILOSOPHY_QUOTES = [
   {
-    text: "Learn from yesterday, live for today, hope for tomorrow. The important thing is not to stop questioning.",
+    text: "Học hỏi từ hôm qua, sống cho hôm nay, hy vọng cho ngày mai. Điều quan trọng là không ngừng đặt câu hỏi.",
     author: "ALBERT EINSTEIN",
   },
   {
-    text: "Tập trung là biết nói không với những điều làm đội ngũ đi chệch khỏi mục tiêu.",
-    author: "STEVE JOBS",
+    text: "Không có gì trong cuộc sống phải sợ hãi, chỉ có những điều cần được thấu hiểu.",
+    author: "MARIE CURIE",
   },
   {
-    text: "Hành trình dài nhất luôn bắt đầu bằng một bước chân nhỏ nhưng dứt khoát.",
-    author: "LÃO TỬ",
+    text: "Tôi nghĩ, nên tôi tồn tại.",
+    author: "RENÉ DESCARTES",
   },
   {
-    text: "Điều quan trọng không phải là biết tất cả, mà là luôn biết mình cần học thêm.",
-    author: "SOCRATES",
+    text: "Những gì chúng ta làm hôm nay có thể cải thiện tương lai.",
+    author: "NELSON MANDELA",
   },
   {
-    text: "Thành công không đến trước công việc, trừ khi bạn chỉ đang đọc từ điển.",
-    author: "VINCE LOMBARDI",
+    text: "Đơn giản là sự tinh tế tối thượng.",
+    author: "LEONARDO DA VINCI",
   },
   {
-    text: "Công nghệ tốt nhất là công nghệ giúp con người làm việc tự nhiên hơn mỗi ngày.",
-    author: "VBEE TEAM",
+    text: "Không quan trọng bạn đi chậm thế nào, miễn là bạn không dừng lại.",
+    author: "KHỔNG TỬ",
   },
   {
-    text: "Muốn sản phẩm đi xa, hãy làm cho trải nghiệm đầu tiên thật dễ hiểu.",
-    author: "PRODUCT PRINCIPLE",
+    text: "Tương lai phụ thuộc vào những gì bạn làm hôm nay.",
+    author: "MAHATMA GANDHI",
   },
 ];
 
-export function PhilosophyQuoteCard() {
+export function PhilosophyQuoteCard({ compact = false }: { compact?: boolean }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const quote = PHILOSOPHY_QUOTES[activeIndex];
 
@@ -56,63 +56,69 @@ export function PhilosophyQuoteCard() {
   }
 
   return (
-    <div className="rounded-2xl border border-border bg-card/85 p-6 shadow-soft">
+    <div className="rounded-lg border border-border bg-white p-4 shadow-soft">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-5xl font-black leading-none text-primary/30">“</p>
-        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-black text-primary">
-          {activeIndex + 1}/{PHILOSOPHY_QUOTES.length}
-        </span>
+        <p className="text-4xl font-black leading-none text-[#ffcb05]">“</p>
+        {!compact && (
+          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-black text-primary">
+            {activeIndex + 1}/{PHILOSOPHY_QUOTES.length}
+          </span>
+        )}
       </div>
 
       <p
         key={quote.text}
-        className="mt-1 min-h-24 animate-in fade-in duration-500 text-sm leading-6 text-muted-foreground"
+        className={`mt-1 animate-in fade-in duration-500 text-muted-foreground ${compact ? "min-h-15 text-sm leading-6" : "min-h-20 text-sm leading-6"}`}
       >
         {quote.text}
       </p>
 
-      <div className="mt-3 flex items-center justify-between gap-3">
+      <div className={`flex items-center justify-between gap-3 ${compact ? "mt-2.5" : "mt-3"}`}>
         <p
           key={quote.author}
-          className="animate-in fade-in duration-500 text-sm font-black text-primary"
+          className="animate-in fade-in duration-500 text-sm font-black text-[#21104a]"
         >
           {quote.author}
         </p>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => move(-1)}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background/50 text-primary transition hover:border-primary hover:bg-primary/10"
-            aria-label="Câu trước"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => move(1)}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background/50 text-primary transition hover:border-primary hover:bg-primary/10"
-            aria-label="Câu tiếp theo"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
+        {!compact && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => move(-1)}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background/50 text-primary transition hover:border-primary hover:bg-primary/10"
+              aria-label="Câu trước"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => move(1)}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background/50 text-primary transition hover:border-primary hover:bg-primary/10"
+              aria-label="Câu tiếp theo"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {!compact && (
+        <div className="mt-4 flex flex-wrap gap-1.5">
+          {PHILOSOPHY_QUOTES.map((item, index) => (
+            <button
+              key={item.text}
+              type="button"
+              onClick={() => setActiveIndex(index)}
+              className={`h-1.5 rounded-full transition ${
+                index === activeIndex ? "w-6 bg-primary" : "w-2 bg-primary/25"
+              }`}
+              aria-label={`Chọn triết lý ${index + 1}`}
+            />
+          ))}
         </div>
-      </div>
+      )}
 
-      <div className="mt-4 flex flex-wrap gap-1.5">
-        {PHILOSOPHY_QUOTES.map((item, index) => (
-          <button
-            key={item.author}
-            type="button"
-            onClick={() => setActiveIndex(index)}
-            className={`h-1.5 rounded-full transition ${
-              index === activeIndex ? "w-6 bg-primary" : "w-2 bg-primary/25"
-            }`}
-            aria-label={`Chọn triết lý ${index + 1}`}
-          />
-        ))}
-      </div>
-
-      <div className="mt-3 h-1 overflow-hidden rounded-full bg-primary/10">
+      <div className={`${compact ? "mt-2.5" : "mt-3"} h-1 overflow-hidden rounded-full bg-primary/10`}>
         <div
           key={activeIndex}
           className="h-full rounded-full bg-primary"

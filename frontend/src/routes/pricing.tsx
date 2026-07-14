@@ -31,6 +31,7 @@ import {
   Zap,
 } from "lucide-react";
 import vbeeLogo from "@/assets/vbee-logo.png";
+import { VbeeBrandLogo } from "@/components/vbee-brand-logo";
 import { useAuth } from "@/context/AuthContext";
 import { createCheckout } from "@/lib/billing";
 import { type PlanCode } from "@/lib/quota";
@@ -65,7 +66,7 @@ export const Route = createFileRoute("/pricing")({
       {
         name: "description",
         content:
-          "Trang bảng giá riêng của Vbee AIVoice với hai lựa chọn thanh toán theo tháng và theo năm, giao diện lấy cảm hứng từ Vbee.",
+          "Bảng giá Vbee AIVoice với lựa chọn thanh toán theo tháng và theo năm cho nhu cầu chuyển giọng nói thành văn bản.",
       },
       { property: "og:title", content: "Bảng giá Vbee AIVoice" },
       {
@@ -191,9 +192,9 @@ const pricingNavigation = [
   {
     label: "Công ty",
     items: [
-      { title: "Về chúng tôi", desc: "Sứ mệnh sản phẩm", href: "/#about", icon: Building2 },
-      { title: "Liên hệ", desc: "Tư vấn triển khai", href: "/#contact", icon: Mail },
-      { title: "Yêu cầu hỗ trợ", desc: "Hỗ trợ kỹ thuật", href: "#faq", icon: Headphones },
+      { title: "Về chúng tôi", desc: "Tầm nhìn và sứ mệnh Vbee", href: "/about", icon: Building2 },
+      { title: "Liên hệ", desc: "Tư vấn triển khai", href: "/contact", icon: Mail },
+      { title: "Yêu cầu hỗ trợ", desc: "Hỗ trợ kỹ thuật", href: "/support", icon: Headphones },
     ],
   },
   {
@@ -208,8 +209,8 @@ const pricingNavigation = [
   {
     label: "Kiếm tiền",
     items: [
-      { title: "Chia sẻ giọng cộng đồng", desc: "Nhận thưởng giới thiệu", href: "/#referral", icon: Gift },
-      { title: "Chương trình Affiliate", desc: "Hoa hồng đối tác", href: "/#referral", icon: CircleDollarSign },
+      { title: "Chia sẻ giọng cộng đồng", desc: "Nhận thưởng giới thiệu", href: "/referral", icon: Gift },
+      { title: "Chương trình Affiliate", desc: "Hoa hồng đối tác", href: "/referral", icon: CircleDollarSign },
     ],
   },
 ];
@@ -233,7 +234,7 @@ const faqs = [
   },
   {
     q: "Có hoàn tiền khi không dùng hết phút không?",
-    a: "Bảng giá demo này chưa nối cổng thanh toán thật. Khi triển khai thực tế, chính sách hoàn tiền nên được quy định rõ trong điều khoản dịch vụ.",
+    a: "Chính sách hoàn tiền và thời hạn sử dụng được áp dụng theo điều khoản dịch vụ tại thời điểm khách hàng đăng ký gói cước.",
   },
 ];
 
@@ -320,7 +321,7 @@ function PricingPage() {
 
   function handleStart() {
     if (user) {
-      void navigate({ to: "/dashboard", search: { token: undefined } });
+      void navigate({ to: "/upload" });
       return;
     }
 
@@ -344,7 +345,7 @@ function PricingPage() {
     }
 
     if (plan.code === "free") {
-      void navigate({ to: "/dashboard", search: { token: undefined } });
+      void navigate({ to: "/upload" });
       return;
     }
 
@@ -370,7 +371,7 @@ function PricingPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f4efe4] text-[#21104a]">
+    <main className="min-h-screen bg-white text-[#21104a]">
       <PricingHeader onStart={handleStart} />
       <PricingHero billing={billing} setBilling={setBilling} />
       {planMessage && (
@@ -401,9 +402,8 @@ function PricingHeader({ onStart }: { onStart: () => void }) {
   return (
     <header className="sticky top-0 z-50 border-b border-[#ece6ff] bg-white/92 shadow-[0_10px_35px_rgba(33,16,74,.05)] backdrop-blur-xl">
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-6">
-        <Link to="/" className="flex items-center gap-2" aria-label="Vbee AIVoice">
-          <img src={vbeeLogo} alt="Vbee AIVoice" className="h-11 w-auto object-contain md:h-12" />
-          <span className="hidden text-[13px] font-black uppercase tracking-tight text-[#21104a] sm:inline">AIVoice</span>
+        <Link to="/" className="flex items-center" aria-label="Vbee AIVoice">
+          <VbeeBrandLogo />
         </Link>
 
         <div className="hidden items-center gap-1 lg:flex">
@@ -419,7 +419,7 @@ function PricingHeader({ onStart }: { onStart: () => void }) {
                       <item.icon className="h-5 w-5" />
                     </span>
                     <span>
-                      <span className="block text-[15px] font-black text-[#21104a]">{item.title}</span>
+                      <span className="block text-sm font-black text-[#21104a]">{item.title}</span>
                       <span className="mt-0.5 block text-xs font-semibold leading-5 text-[#756894]">{item.desc}</span>
                     </span>
                   </a>
@@ -475,19 +475,21 @@ function PricingHero({
   setBilling: (billing: BillingCycle) => void;
 }) {
   return (
-    <section className="relative overflow-hidden px-4 pb-10 pt-12 md:px-6 md:pb-14 md:pt-16">
-      <div className="absolute left-1/2 top-0 h-72 w-72 -translate-x-1/2 rounded-full bg-[#ffcb05]/25 blur-3xl" />
-      <div className="absolute right-[12%] top-20 h-44 w-44 rounded-full bg-[#21104a]/10 blur-3xl" />
+    <section className="relative overflow-hidden bg-[#21104a] px-4 pb-10 pt-10 text-white md:px-6 md:pb-14 md:pt-12">
+      <div className="absolute left-1/2 top-0 h-72 w-72 -translate-x-1/2 rounded-full bg-[#ffcb05]/20 blur-3xl" />
+      <div className="absolute right-[12%] top-20 h-52 w-52 rounded-full bg-[#6c45ae]/45 blur-3xl" />
+      <div className="absolute inset-0 opacity-20 vbee-foundation-grid" />
 
       <div className="relative mx-auto max-w-7xl text-center">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[#e2d7c3] bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-[#725a00] shadow-[0_14px_40px_rgba(33,16,74,.06)]">
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-wide text-[#ffdc45]">
           <Sparkles className="h-4 w-4 text-[#ffcb05]" /> Bảng giá dịch vụ
         </div>
-        <h1 className="mx-auto mt-5 max-w-3xl text-3xl font-black leading-tight tracking-tight text-[#21104a] md:text-5xl lg:text-6xl">
+        <h1 className="mx-auto mt-5 max-w-3xl text-2xl font-black leading-tight tracking-tight text-white md:text-3xl lg:text-4xl">
           Chọn gói Vbee AIVoice phù hợp với nhu cầu của bạn
         </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-[#6a5a8f] md:text-base">
-          Trang bảng giá riêng được dựng theo bố cục Vbee: nền kem, card trắng, gói nổi bật màu vàng và bảng so sánh tính năng chi tiết. Bạn có thể chuyển giữa giá theo tháng và theo năm.
+        <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-white/72">
+          Chọn gói theo thời lượng xử lý, nhu cầu xuất dữ liệu và mức độ hỗ trợ.
+          Bạn có thể chuyển giữa giá theo tháng và theo năm.
         </p>
 
         <BillingToggle billing={billing} setBilling={setBilling} className="mt-8" />
@@ -500,10 +502,10 @@ function PricingHero({
           ].map(([Icon, title, desc]) => {
             const TypedIcon = Icon as typeof Clock3;
             return (
-              <div key={String(title)} className="rounded-2xl border border-[#eee4d3] bg-white/80 p-4 shadow-[0_12px_40px_rgba(33,16,74,.05)]">
+              <div key={String(title)} className="rounded-2xl border border-white/15 bg-white/10 p-4">
                 <TypedIcon className="h-5 w-5 text-[#ffcb05]" />
-                <p className="mt-3 font-black text-[#21104a]">{title as string}</p>
-                <p className="mt-1 text-xs leading-5 text-[#6a5a8f]">{desc as string}</p>
+                <p className="mt-3 font-black text-white">{title as string}</p>
+                <p className="mt-1 text-xs leading-5 text-white/65">{desc as string}</p>
               </div>
             );
           })}
@@ -522,7 +524,7 @@ function BillingToggle({
   setBilling: (billing: BillingCycle) => void;
   className?: string;
 }) {
-  const itemClass = "relative z-10 rounded-full px-5 py-2.5 text-sm font-black transition md:px-7";
+  const itemClass = "relative z-10 rounded-full px-5 py-2.5 text-[13px] font-black transition md:px-7";
 
   return (
     <div className={`inline-flex rounded-full border border-[#e8decc] bg-white p-1 shadow-[0_16px_45px_rgba(33,16,74,.08)] ${className}`}>
@@ -556,19 +558,20 @@ function PlanCards({
   onSelectPlan: (plan: Plan) => void;
 }) {
   return (
-    <section id="plans" className="px-4 pb-14 md:px-6 md:pb-20">
+    <section id="plans" className="px-4 pb-12 md:px-6 md:pb-14">
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col justify-between gap-3 md:flex-row md:items-end">
           <div>
             <p className="text-sm font-black uppercase tracking-wide text-[#9a7b00]">
               {billing === "monthly" ? "Bảng giá theo tháng" : "Bảng giá theo năm"}
             </p>
-            <h2 className="mt-2 text-2xl font-black text-[#21104a] md:text-4xl">
+            <h2 className="mt-2 text-xl font-black text-[#21104a] md:text-3xl">
               {billing === "monthly" ? "Thanh toán linh hoạt hàng tháng" : "Thanh toán năm tiết kiệm hơn"}
             </h2>
           </div>
           <p className="max-w-xl text-sm leading-7 text-[#6a5a8f]">
-            Mỗi gói gồm số phút xử lý, giới hạn file và quyền xuất dữ liệu khác nhau. Gói Pro được làm nổi bật giống thẻ giá chính trong ảnh mẫu.
+            Mỗi gói gồm số phút xử lý, giới hạn file và quyền xuất dữ liệu khác nhau.
+            Gói được đề xuất phù hợp với người dùng cần xử lý thường xuyên.
           </p>
         </div>
 
@@ -576,9 +579,9 @@ function PlanCards({
           {plans.map((plan) => (
             <article
               key={plan.name}
-              className={`relative flex min-h-[520px] flex-col rounded-[1.75rem] border p-5 shadow-[0_20px_70px_rgba(33,16,74,.08)] transition hover:-translate-y-1 md:p-6 ${
+              className={`relative flex min-h-[460px] flex-col rounded-2xl border p-5 shadow-[0_14px_45px_rgba(33,16,74,.06)] transition hover:-translate-y-1 ${
                 plan.highlight
-                  ? "border-[#ffcb05] bg-[#21104a] text-white shadow-[0_28px_90px_rgba(33,16,74,.23)]"
+                  ? "border-[#ffcb05] bg-[#21104a] text-white shadow-[0_20px_70px_rgba(33,16,74,.18)]"
                   : "border-[#eee4d3] bg-white text-[#21104a]"
               }`}
             >
@@ -608,7 +611,7 @@ function PlanCards({
               </div>
 
               <div className="mt-6 flex items-end gap-1">
-                <span className="text-3xl font-black tracking-tight md:text-4xl">{plan.price}</span>
+                <span className="text-2xl font-black tracking-tight md:text-3xl">{plan.price}</span>
                 {plan.unit && <span className={`pb-1 text-sm font-bold ${plan.highlight ? "text-white/60" : "text-[#6a5a8f]"}`}>{plan.unit}</span>}
               </div>
 
@@ -654,10 +657,10 @@ function PricingValueBand() {
   ];
 
   return (
-    <section className="bg-[#fbf8ef] px-4 py-10 md:px-6 md:py-14">
+    <section className="bg-[#f7f5ff] px-4 py-10 md:px-6 md:py-12">
       <div className="mx-auto grid max-w-7xl gap-4 md:grid-cols-3">
         {values.map((item) => (
-          <div key={item.title} className="rounded-[1.5rem] border border-[#eee4d3] bg-white p-6 shadow-[0_14px_55px_rgba(33,16,74,.06)]">
+          <div key={item.title} className="rounded-xl border border-[#eee4d3] bg-white p-5 shadow-[0_10px_35px_rgba(33,16,74,.05)]">
             <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#21104a] text-[#ffcb05]">
               <item.icon className="h-6 w-6" />
             </div>
@@ -693,22 +696,23 @@ function CompareTable({
   }));
 
   return (
-    <section className="bg-white px-4 py-16 md:px-6 md:py-24">
+    <section className="bg-white px-4 py-12 md:px-6 md:py-16">
       <div className="mx-auto max-w-7xl">
         <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-[#fff7c2] px-4 py-2 text-xs font-black uppercase tracking-wide text-[#725a00]">
               <BadgeCheck className="h-4 w-4" /> So sánh chi tiết
             </div>
-            <h2 className="mt-4 text-3xl font-black text-[#21104a] md:text-5xl">Bảng so sánh tính năng</h2>
+            <h2 className="mt-4 text-2xl font-black text-[#21104a] md:text-3xl">Bảng so sánh tính năng</h2>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-[#6a5a8f]">
-              Bảng được chia nhóm giống ảnh mẫu: phần đầu là tên gói, bên dưới là các dòng tính năng có dấu tích rõ ràng.
+              So sánh nhanh thời lượng, giới hạn file, xuất dữ liệu, API và hỗ trợ
+              để chọn gói phù hợp trước khi thanh toán.
             </p>
           </div>
           <BillingToggle billing={billing} setBilling={setBilling} />
         </div>
 
-        <div className="mt-10 overflow-hidden rounded-[1.75rem] border border-[#eee8ff] bg-white shadow-[0_18px_70px_rgba(33,16,74,.08)]">
+        <div className="mt-8 overflow-hidden rounded-2xl border border-[#eee8ff] bg-white shadow-[0_14px_45px_rgba(33,16,74,.06)]">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] border-collapse text-left text-sm">
               <thead>
@@ -730,7 +734,8 @@ function CompareTable({
         </div>
 
         <div className="mt-5 rounded-2xl border border-[#eee4d3] bg-[#fbf8ef] p-5 text-sm leading-7 text-[#6a5a8f]">
-          <strong className="text-[#21104a]">Ghi chú:</strong> Số liệu trong bảng dùng cho giao diện demo. Khi nối backend thanh toán thật, bạn chỉ cần thay mảng dữ liệu giá và tính năng trong file <code className="rounded bg-white px-1.5 py-0.5 text-xs text-[#21104a]">src/routes/pricing.tsx</code>.
+          <strong className="text-[#21104a]">Ghi chú:</strong> Giá, thời lượng và
+          tính năng có thể thay đổi theo chính sách gói cước tại thời điểm đăng ký.
         </div>
       </div>
     </section>
@@ -802,18 +807,18 @@ function CompareCell({ value, highlight = false }: { value: CompareValue; highli
 
 function PricingFaq() {
   return (
-    <section id="faq" className="bg-[#f4efe4] px-4 py-16 md:px-6 md:py-24">
+    <section id="faq" className="bg-[#f7f5ff] px-4 py-12 md:px-6 md:py-16">
       <div className="mx-auto max-w-4xl">
         <div className="text-center">
           <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-[#725a00] shadow-[0_12px_35px_rgba(33,16,74,.06)]">
             <HelpCircle className="h-4 w-4 text-[#ffcb05]" /> Câu hỏi thường gặp
           </div>
-          <h2 className="mt-4 text-3xl font-black text-[#21104a] md:text-5xl">Giải đáp trước khi mua gói</h2>
+          <h2 className="mt-4 text-2xl font-black text-[#21104a] md:text-3xl">Giải đáp trước khi mua gói</h2>
         </div>
 
         <div className="mt-10 space-y-4">
           {faqs.map((item) => (
-            <details key={item.q} className="group rounded-2xl border border-[#eee4d3] bg-white p-5 shadow-[0_12px_45px_rgba(33,16,74,.06)]">
+            <details key={item.q} className="group rounded-xl border border-[#eee4d3] bg-white p-4 shadow-[0_10px_32px_rgba(33,16,74,.05)]">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-black text-[#21104a]">
                 <span>{item.q}</span>
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#f7f3ff] text-[#21104a] transition group-open:rotate-180">
@@ -831,17 +836,18 @@ function PricingFaq() {
 
 function EnterpriseCta({ onStart }: { onStart: () => void }) {
   return (
-    <section id="enterprise" className="bg-white px-4 py-16 md:px-6 md:py-20">
-      <div className="mx-auto grid max-w-7xl overflow-hidden rounded-[2rem] bg-[#21104a] text-white shadow-[0_28px_100px_rgba(33,16,74,.22)] lg:grid-cols-[1.05fr_.95fr]">
-        <div className="relative p-7 md:p-10 lg:p-12">
+    <section id="enterprise" className="bg-white px-4 py-12 md:px-6 md:py-14">
+      <div className="mx-auto grid max-w-7xl overflow-hidden rounded-2xl bg-[#21104a] text-white shadow-[0_20px_70px_rgba(33,16,74,.18)] lg:grid-cols-[1.05fr_.95fr]">
+        <div className="relative p-6 md:p-8 lg:p-10">
           <div className="absolute -left-16 -top-16 h-48 w-48 rounded-full bg-[#ffcb05]/20 blur-3xl" />
           <div className="relative">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-wide text-[#ffcb05]">
               <Headphones className="h-4 w-4" /> Tư vấn gói phù hợp
             </div>
-            <h2 className="mt-5 text-3xl font-black leading-tight md:text-5xl">Doanh nghiệp cần số phút lớn hoặc tích hợp API?</h2>
-            <p className="mt-4 max-w-2xl text-sm leading-8 text-white/70 md:text-base">
-              Để giống phần liên hệ trong ảnh mẫu, khối này dùng nền tím đậm, form trắng và nút vàng. Bạn có thể nối form với backend sau.
+            <h2 className="mt-5 text-2xl font-black leading-tight md:text-3xl">Doanh nghiệp cần số phút lớn hoặc tích hợp API?</h2>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-white/70">
+              Vbee hỗ trợ tư vấn gói riêng cho đội nhóm có nhu cầu xử lý số phút
+              lớn, tích hợp API hoặc yêu cầu vận hành đặc thù.
             </p>
             <div className="mt-8 grid gap-4 sm:grid-cols-3">
               {[
@@ -861,10 +867,10 @@ function EnterpriseCta({ onStart }: { onStart: () => void }) {
           </div>
         </div>
 
-        <div className="bg-white p-6 text-[#21104a] md:p-8 lg:p-10">
-          <div className="rounded-[1.5rem] border border-[#eee8ff] bg-[#fbf8ef] p-5 md:p-6">
+        <div className="bg-white p-5 text-[#21104a] md:p-6 lg:p-8">
+          <div className="rounded-xl border border-[#eee8ff] bg-[#fbf8ef] p-5">
             <h3 className="text-2xl font-black">Nhận tư vấn bảng giá</h3>
-            <p className="mt-2 text-sm leading-6 text-[#6a5a8f]">Điền thông tin demo hoặc bấm nút bên dưới để vào trang đăng nhập.</p>
+            <p className="mt-2 text-sm leading-6 text-[#6a5a8f]">Để lại thông tin để Vbee tư vấn gói cước phù hợp với nhu cầu sử dụng.</p>
             <div className="mt-5 space-y-3">
               <input className="w-full rounded-2xl border border-[#e8decc] bg-white px-4 py-3 text-sm font-semibold text-[#21104a] outline-none transition focus:border-[#ffcb05]" placeholder="Họ và tên" />
               <input className="w-full rounded-2xl border border-[#e8decc] bg-white px-4 py-3 text-sm font-semibold text-[#21104a] outline-none transition focus:border-[#ffcb05]" placeholder="Email hoặc số điện thoại" />
@@ -889,7 +895,7 @@ function PricingFooter() {
       <div className="mx-auto grid max-w-7xl gap-10 md:grid-cols-[1.1fr_.9fr_.9fr_.9fr]">
         <div>
           <img src={vbeeLogo} alt="Vbee" className="h-14 w-auto rounded-xl bg-white/95 p-1" />
-          <p className="mt-5 max-w-sm text-sm leading-7 text-white/65">Vbee AIVoice — bảng giá riêng theo tháng và theo năm, giao diện lấy cảm hứng từ Vbee.</p>
+          <p className="mt-5 max-w-sm text-sm leading-7 text-white/65">Vbee AIVoice — bảng giá theo tháng và theo năm cho nền tảng speech-to-text.</p>
         </div>
         {[
           ["Sản phẩm", ["Speech to Text", "Record", "History", "Export DOCX"]],
@@ -904,7 +910,7 @@ function PricingFooter() {
           </div>
         ))}
       </div>
-      <div className="mx-auto mt-10 max-w-7xl border-t border-white/10 pt-6 text-sm text-white/50">© 2026 Vbee AIVoice. Pricing UI redesigned.</div>
+      <div className="mx-auto mt-10 max-w-7xl border-t border-white/10 pt-6 text-sm text-white/50">© 2026 Vbee AIVoice. All rights reserved.</div>
     </footer>
   );
 }

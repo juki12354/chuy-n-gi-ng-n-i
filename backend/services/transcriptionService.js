@@ -64,8 +64,9 @@ function normalizeAudioMode(mode) {
   const clean = String(mode || "")
     .trim()
     .toLowerCase();
-  if (["song", "music", "lyrics", "vocal"].includes(clean)) return "song";
-  return "speech";
+  return ["song", "music", "lyrics", "vocal"].includes(clean)
+    ? "song"
+    : "speech";
 }
 
 function getFfmpegPath() {
@@ -73,13 +74,11 @@ function getFfmpegPath() {
 }
 
 function safeUnlink(filePath) {
-  if (!filePath) return;
-  fs.unlink(filePath, () => {});
+  if (filePath) fs.unlink(filePath, () => {});
 }
 
 function safeRmDir(dirPath) {
-  if (!dirPath) return;
-  fs.rm(dirPath, { recursive: true, force: true }, () => {});
+  if (dirPath) fs.rm(dirPath, { recursive: true, force: true }, () => {});
 }
 
 function shouldAttemptDemucs() {
@@ -107,20 +106,15 @@ function findFileByName(rootDir, targetName) {
     if (!current) continue;
     for (const item of fs.readdirSync(current, { withFileTypes: true })) {
       const fullPath = path.join(current, item.name);
-      if (item.isDirectory()) {
-        stack.push(fullPath);
-      } else if (item.name.toLowerCase() === targetName.toLowerCase()) {
-        return fullPath;
-      }
+      if (item.isDirectory()) stack.push(fullPath);
+      else if (item.name.toLowerCase() === targetName.toLowerCase()) return fullPath;
     }
   }
   return null;
 }
 
 async function runDemucsVocalIsolation(inputPath) {
-  if (!shouldAttemptDemucs()) {
-    return { vocalsPath: null, warning: null };
-  }
+  if (!shouldAttemptDemucs()) return { vocalsPath: null, warning: null };
 
   const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "vbee-demucs-"));
   const { command, prefixArgs } = getDemucsCommandSpec();
@@ -129,22 +123,22 @@ async function runDemucsVocalIsolation(inputPath) {
     process.env.DEMUCS_TIMEOUT_MS || `${10 * 60 * 1000}`,
     10,
   );
-  const args = [
-    ...prefixArgs,
-    "--two-stems",
-    "vocals",
-    "-n",
-    model,
-    "--out",
-    outputDir,
-    inputPath,
-  ];
 
   try {
-    await execFileAsync(command, args, {
-      timeout,
-      maxBuffer: 32 * 1024 * 1024,
-    });
+    await execFileAsync(
+      command,
+      [
+        ...prefixArgs,
+        "--two-stems",
+        "vocals",
+        "-n",
+        model,
+        "--out",
+        outputDir,
+        inputPath,
+      ],
+      { timeout, maxBuffer: 32 * 1024 * 1024, windowsHide: true },
+    );
     const vocalsPath = findFileByName(outputDir, "vocals.wav");
     if (!vocalsPath) {
       return {
@@ -168,13 +162,8 @@ async function runDemucsVocalIsolation(inputPath) {
 }
 
 async function transcodeToSttWav(inputPath, outputPath, filters, timeout) {
-  const ffmpegPath = getFfmpegPath();
-  if (!ffmpegPath) {
-    throw new Error("Chưa có ffmpeg nên chưa thể chuẩn hóa audio.");
-  }
-
   await execFileAsync(
-    ffmpegPath,
+    getFfmpegPath(),
     [
       "-hide_banner",
       "-y",
@@ -191,18 +180,13 @@ async function transcodeToSttWav(inputPath, outputPath, filters, timeout) {
       "wav",
       outputPath,
     ],
-    { timeout, maxBuffer: 16 * 1024 * 1024 },
+    { timeout, maxBuffer: 16 * 1024 * 1024, windowsHide: true },
   );
 }
 
 async function transcodeForDemucs(inputPath, outputPath, timeout) {
-  const ffmpegPath = getFfmpegPath();
-  if (!ffmpegPath) {
-    throw new Error("Chưa có ffmpeg nên chưa thể chuẩn bị audio cho Demucs.");
-  }
-
   await execFileAsync(
-    ffmpegPath,
+    getFfmpegPath(),
     [
       "-hide_banner",
       "-y",
@@ -217,23 +201,13 @@ async function transcodeForDemucs(inputPath, outputPath, timeout) {
       "wav",
       outputPath,
     ],
-    { timeout, maxBuffer: 16 * 1024 * 1024 },
+    { timeout, maxBuffer: 16 * 1024 * 1024, windowsHide: true },
   );
 }
 
 async function prepareMusicAudioForStt(file, filename) {
   if (process.env.AUDIO_PREPROCESSING_ENABLED === "false") {
     return { file, applied: false, method: null, warning: null };
-  }
-
-  const ffmpegPath = getFfmpegPath();
-  if (!ffmpegPath) {
-    return {
-      file,
-      applied: false,
-      method: null,
-      warning: "Chưa có ffmpeg nên chưa thể làm rõ vocal trước khi phiên âm.",
-    };
   }
 
   const tempBase = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -257,9 +231,12 @@ async function prepareMusicAudioForStt(file, filename) {
     await transcodeForDemucs(inputPath, demucsInputPath, timeout);
     const demucs = await runDemucsVocalIsolation(demucsInputPath);
     demucsOutputDir = demucs.outputDir;
-    const sourcePath = demucs.vocalsPath || inputPath;
-    await transcodeToSttWav(sourcePath, outputPath, filters, timeout);
-
+    await transcodeToSttWav(
+      demucs.vocalsPath || inputPath,
+      outputPath,
+      filters,
+      timeout,
+    );
     const buffer = fs.readFileSync(outputPath);
     return {
       file: {
@@ -609,7 +586,17 @@ async function transcribeWithDeepgram({
 }
 
 function getSonixLanguage() {
-  return (process.env.SONIX_LANGUAGE || "vi").trim();
+  const configured = normalizeLanguageCode(process.env.SONIX_LANGUAGE, "vi");
+  return configured === "auto" || configured === "multi" ? "vi" : configured;
+}
+
+function resolveSonixLanguage(language) {
+  const selected = normalizeLanguageCode(language, getSonixLanguage());
+  // The REST API expects an explicit language code. The app's "auto" option
+  // is useful for Deepgram, but would make a Sonix upload invalid or unreliable.
+  return selected === "auto" || selected === "multi"
+    ? getSonixLanguage()
+    : selected;
 }
 
 async function submitSonixMedia(file, filename, language, dictionaryKeywords = []) {
@@ -628,7 +615,7 @@ async function submitSonixMedia(file, filename, language, dictionaryKeywords = [
     }),
     filename,
   );
-  form.append("language", normalizeLanguageCode(language, getSonixLanguage()));
+  form.append("language", resolveSonixLanguage(language));
   form.append("name", filename);
 
   const keywords = [
@@ -806,7 +793,7 @@ async function transcribeAudio({
   const preprocessing =
     normalizedAudioMode === "song"
       ? await prepareMusicAudioForStt(file, filename)
-      : { file, applied: false, warning: null };
+      : { file, applied: false, method: null, warning: null };
   const providerFile = preprocessing.file;
 
   if (provider === "sonix") {
@@ -895,8 +882,8 @@ async function transcribeAndSave({
       throw createHttpError(
         422,
         isSongMode
-          ? "Chế độ bài hát đã thử làm rõ vocal nhưng vẫn chưa phát hiện đủ lời để xuất văn bản. Hãy thử file có vocal rõ hơn, bản karaoke/acapella, hoặc nối thêm model tách vocal AI như Demucs."
-          : "Không phát hiện lời nói rõ để xuất thành văn bản. Nếu đây là file nhạc MP3, hãy bật chế độ Bài hát/nhạc nền rồi thử lại.",
+          ? "Chế độ bài hát đã thử tách vocal nhưng vẫn chưa phát hiện đủ lời để xuất văn bản. Hãy thử bản có vocal rõ hơn hoặc karaoke/acapella."
+          : "Không phát hiện lời nói hoặc lời hát đủ rõ để xuất thành văn bản. Hãy thử file gốc có chất lượng tốt hơn hoặc kiểm tra ngôn ngữ đã chọn.",
       );
     }
 

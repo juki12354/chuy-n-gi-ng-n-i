@@ -158,6 +158,16 @@ export function VbeeSupportWidget() {
     };
   }, [open, view, token, notice]);
 
+  useEffect(() => {
+    function openSupport() {
+      setOpen(true);
+      setView("home");
+    }
+
+    window.addEventListener("vbee:open-support", openSupport);
+    return () => window.removeEventListener("vbee:open-support", openSupport);
+  }, []);
+
   async function handleSend() {
     const cleanMessage = message.trim();
     if (!cleanMessage) {
@@ -205,7 +215,7 @@ export function VbeeSupportWidget() {
   return (
     <div className="fixed bottom-5 right-5 z-[90] flex flex-col items-end gap-3">
       {open && (
-        <div className="w-[min(420px,calc(100vw-2rem))] overflow-hidden rounded-[1.8rem] border border-[#ffcb05]/45 bg-white text-[#21104a] shadow-[0_28px_90px_rgba(0,0,0,.35)]">
+        <div className="w-[min(400px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-[#e8decc] bg-white text-[#21104a] shadow-[0_18px_60px_rgba(33,16,74,.18)]">
           {view === "home" && (
             <SupportHome
               displayName={displayName}
@@ -258,7 +268,7 @@ export function VbeeSupportWidget() {
           setOpen((value) => !value);
           if (!open) setView("home");
         }}
-        className="relative grid h-14 w-14 place-items-center rounded-full bg-[#ffcb05] text-[#21104a] shadow-[0_16px_45px_rgba(255,203,5,.35)] transition hover:-translate-y-0.5 hover:bg-[#ffdc45]"
+        className="relative grid h-12 w-12 place-items-center rounded-full bg-[#ffcb05] text-[#21104a] shadow-[0_12px_35px_rgba(255,203,5,.28)] transition hover:-translate-y-0.5 hover:bg-[#ffdc45]"
         aria-label={open ? "Đóng hỗ trợ Vbee" : "Mở hỗ trợ Vbee"}
       >
         {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
@@ -280,7 +290,7 @@ function SupportHome({
 }) {
   return (
     <>
-      <div className="bg-[#21104a] px-6 pb-14 pt-6 text-white">
+      <div className="bg-[#21104a] px-5 pb-12 pt-5 text-white">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 font-black">
             <MessageCircle className="h-5 w-5 text-[#ffcb05]" />
@@ -294,17 +304,17 @@ function SupportHome({
             <X className="h-5 w-5" />
           </button>
         </div>
-        <h2 className="mt-12 text-3xl font-black leading-tight">
+        <h2 className="mt-10 text-2xl font-black leading-tight">
           Xin chào {displayName}!
           <br />
           Vbee có thể hỗ trợ gì?
         </h2>
       </div>
 
-      <div className="-mt-9 space-y-3 px-5 pb-5">
+      <div className="-mt-8 space-y-3 px-4 pb-4">
         <button
           onClick={() => setView("chat")}
-          className="flex w-full items-center justify-between rounded-2xl bg-white px-5 py-4 text-left shadow-[0_16px_45px_rgba(33,16,74,.15)] transition hover:-translate-y-0.5"
+          className="flex w-full items-center justify-between rounded-xl bg-white px-4 py-3 text-left shadow-[0_10px_32px_rgba(33,16,74,.10)] transition hover:-translate-y-0.5"
         >
           <span>
             <span className="block font-black">Gửi yêu cầu hỗ trợ</span>
@@ -315,7 +325,7 @@ function SupportHome({
           <ChevronRight className="h-6 w-6 text-[#ffcb05]" />
         </button>
 
-        <div className="rounded-2xl border border-[#eee8ff] bg-white p-4 shadow-[0_12px_35px_rgba(33,16,74,.08)]">
+        <div className="rounded-xl border border-[#eee8ff] bg-white p-3 shadow-[0_10px_28px_rgba(33,16,74,.06)]">
           <button
             onClick={() => setView("help")}
             className="mb-3 flex w-full items-center justify-between rounded-xl bg-[#f7f4ff] px-3 py-3 text-left text-sm font-black"
@@ -337,7 +347,7 @@ function SupportHome({
           </div>
         </div>
 
-        <div className="rounded-2xl bg-[#21104a] p-4 text-white">
+        <div className="rounded-xl bg-[#21104a] p-4 text-white">
           <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-[#ffcb05]">
             <Clock3 className="h-4 w-4" />
             Quota hiện tại
@@ -389,14 +399,14 @@ function SupportMessages({
   return (
     <>
       <SupportHeader title="Tin nhắn hỗ trợ" setOpen={setOpen} />
-      <div className="min-h-[440px] px-5 py-5">
+      <div className="min-h-[400px] px-4 py-4">
         {notice && (
-          <div className="mb-4 rounded-2xl bg-[#fff8cf] px-4 py-3 text-sm font-bold text-[#21104a]">
+          <div className="mb-4 rounded-lg bg-[#fff8cf] px-4 py-3 text-sm font-bold text-[#21104a]">
             {notice}
           </div>
         )}
         {error && (
-          <div className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+          <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
             {error}
           </div>
         )}
@@ -438,7 +448,7 @@ function SupportMessages({
             {tickets.map((ticket) => (
               <div
                 key={ticket.id}
-                className="rounded-2xl border border-[#eee8ff] bg-[#fbfaff] p-4"
+                className="rounded-lg border border-[#eee8ff] bg-[#fbfaff] p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -488,7 +498,7 @@ function SupportChatView({
   return (
     <>
       <SupportHeader title="Gửi hỗ trợ Vbee" setOpen={setOpen} />
-      <div className="space-y-4 px-5 py-5">
+      <div className="space-y-4 px-4 py-4">
         <p className="text-sm font-semibold leading-6 text-[#62557b]">
           Mô tả vấn đề bạn đang gặp. Vbee sẽ lưu ticket kèm trang hiện tại,
           email và gói sử dụng để hỗ trợ nhanh hơn.
@@ -503,7 +513,7 @@ function SupportChatView({
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="email@example.com"
-              className="mt-2 w-full rounded-2xl border border-[#eee8ff] bg-[#fbfaff] px-4 py-3 text-sm font-semibold outline-none focus:border-[#ffcb05]"
+              className="mt-2 w-full rounded-lg border border-[#eee8ff] bg-[#fbfaff] px-4 py-2.5 text-sm font-semibold outline-none focus:border-[#ffcb05]"
             />
           </label>
         )}
@@ -515,7 +525,7 @@ function SupportChatView({
           <select
             value={category}
             onChange={(event) => setCategory(event.target.value)}
-            className="mt-2 w-full rounded-2xl border border-[#eee8ff] bg-[#fbfaff] px-4 py-3 text-sm font-semibold outline-none focus:border-[#ffcb05]"
+            className="mt-2 w-full rounded-lg border border-[#eee8ff] bg-[#fbfaff] px-4 py-2.5 text-sm font-semibold outline-none focus:border-[#ffcb05]"
           >
             {CATEGORY_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -534,12 +544,12 @@ function SupportChatView({
             onChange={(event) => setMessage(event.target.value)}
             rows={5}
             placeholder="Ví dụ: Tôi upload file mp3 nhưng báo Provider API lỗi 401..."
-            className="mt-2 w-full resize-none rounded-2xl border border-[#eee8ff] bg-[#fbfaff] px-4 py-3 text-sm font-semibold leading-6 outline-none focus:border-[#ffcb05]"
+            className="mt-2 w-full resize-none rounded-lg border border-[#eee8ff] bg-[#fbfaff] px-4 py-2.5 text-sm font-semibold leading-6 outline-none focus:border-[#ffcb05]"
           />
         </label>
 
         {error && (
-          <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+          <div className="rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
             {error}
           </div>
         )}
@@ -573,8 +583,8 @@ function SupportHelp({
   return (
     <>
       <SupportHeader title="Trung tâm trợ giúp" setOpen={setOpen} />
-      <div className="px-5 py-5">
-        <div className="flex items-center gap-2 rounded-2xl bg-[#f7f4ff] px-4 py-3">
+      <div className="px-4 py-4">
+        <div className="flex items-center gap-2 rounded-lg bg-[#f7f4ff] px-4 py-3">
           <Search className="h-4 w-4 text-[#756894]" />
           <input
             value={search}
@@ -587,7 +597,7 @@ function SupportHelp({
           {questions.map((item) => (
             <details
               key={item.title}
-              className="rounded-2xl border border-[#eee8ff] bg-white p-4"
+              className="rounded-lg border border-[#eee8ff] bg-white p-4"
             >
               <summary className="flex cursor-pointer list-none items-center gap-3 font-black">
                 <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#fff8cf] text-[#21104a]">
@@ -620,7 +630,7 @@ function SupportHeader({
   setOpen: (open: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between border-b border-[#eee8ff] px-5 py-4">
+    <div className="flex items-center justify-between border-b border-[#eee8ff] px-4 py-3">
       <span className="w-8" />
       <h2 className="text-lg font-black">{title}</h2>
       <button
@@ -646,9 +656,9 @@ function SupportBottomNav({
     label: string;
     icon: typeof Home;
   }> = [
-    { view: "home", label: "Home", icon: Home },
-    { view: "messages", label: "Messages", icon: Inbox },
-    { view: "help", label: "Help", icon: CircleHelp },
+    { view: "home", label: "Trang chính", icon: Home },
+    { view: "messages", label: "Tin nhắn", icon: Inbox },
+    { view: "help", label: "Trợ giúp", icon: CircleHelp },
   ];
 
   return (

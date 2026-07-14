@@ -3,9 +3,9 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Check, Languages, X } from "lucide-react";
 import { AuthenticatedHeader } from "@/components/auth-app-header";
 import {
-  SonixPreferencesFooter,
-  SonixPreferencesSidebar,
-} from "@/components/sonix-preferences-layout";
+  VbeePreferencesFooter,
+  VbeePreferencesSidebar,
+} from "@/components/vbee-preferences-layout";
 import { useAuth } from "@/context/AuthContext";
 
 const API_URL =
@@ -165,18 +165,18 @@ function TranscriptionSettingsPage() {
     <div className="min-h-screen bg-background text-foreground">
       <AuthenticatedHeader />
 
-      <main className="mx-auto grid max-w-7xl gap-6 px-4 py-8 md:px-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <main className="mx-auto grid max-w-7xl gap-5 px-4 py-6 md:px-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section className="min-w-0">
-          <div className="mb-6 border-b-4 border-primary pb-5">
-            <h1 className="text-3xl font-light tracking-tight md:text-5xl">
-              Transcription settings
+          <div className="mb-5 border-b-2 border-[#ffcb05] pb-4">
+            <h1 className="text-2xl font-light tracking-tight md:text-3xl">
+              Cài đặt transcript
             </h1>
           </div>
 
-          <div className="max-w-3xl rounded-2xl border border-border bg-card/75 px-5 shadow-soft sm:px-7">
+          <div className="max-w-3xl rounded-lg border border-border bg-white px-5 shadow-soft sm:px-6">
             <SettingBlock
-              title="Automatically adjust timecode from metadata"
-              description="Timecode offsets change the start time of a file and affect all word timestamps. You can keep every transcript starting at 00:00:00.000 or let the system use media metadata."
+              title="Tự động điều chỉnh mốc thời gian từ metadata"
+              description="Mốc thời gian ảnh hưởng đến thời điểm bắt đầu của file và toàn bộ timestamp theo từng từ. Bạn có thể để transcript bắt đầu từ 00:00:00.000 hoặc dùng metadata của file."
             >
               <select
                 value={settings.timecodeOffset}
@@ -186,21 +186,21 @@ function TranscriptionSettingsPage() {
                     timecodeOffset: event.target.value as TimecodeOffset,
                   }))
                 }
-                className="w-full rounded-md border border-border bg-background px-3 py-3 text-sm font-semibold outline-none transition focus:border-primary"
+                className="w-full rounded-md border border-border bg-[#fbf8ef] px-3 py-2.5 text-sm font-semibold outline-none transition focus:border-primary"
               >
                 <option value="yes">
-                  YES: Automatically adjust timecode offset
+                  CÓ: Tự động điều chỉnh mốc thời gian
                 </option>
                 <option value="no">
-                  NO: Start all files at 00:00:00.000 (default)
+                  KHÔNG: Bắt đầu từ 00:00:00.000 (mặc định)
                 </option>
               </select>
             </SettingBlock>
 
             <SettingBlock
-              eyebrow="🇺🇸 🇬🇧 🇦🇺 English transcripts only"
-              title="English spelling preference"
-              description="Custom dictionary words and phrases always take priority. Choose the spelling style to prefer when English transcripts are generated."
+              eyebrow="🇺🇸 🇬🇧 🇦🇺 Chỉ áp dụng cho transcript tiếng Anh"
+              title="Kiểu chính tả tiếng Anh"
+              description="Từ điển riêng luôn được ưu tiên. Chọn kiểu chính tả mong muốn khi tạo transcript tiếng Anh."
             >
               <select
                 value={settings.spellingPreference}
@@ -211,18 +211,18 @@ function TranscriptionSettingsPage() {
                       .value as SpellingPreference,
                   }))
                 }
-                className="w-full rounded-md border border-border bg-background px-3 py-3 text-sm font-semibold outline-none transition focus:border-primary"
+                className="w-full rounded-md border border-border bg-[#fbf8ef] px-3 py-2.5 text-sm font-semibold outline-none transition focus:border-primary"
               >
-                <option value="american">American spelling</option>
-                <option value="australian">Australian spelling</option>
-                <option value="british">British spelling</option>
+                <option value="american">Chính tả Mỹ</option>
+                <option value="australian">Chính tả Úc</option>
+                <option value="british">Chính tả Anh</option>
               </select>
             </SettingBlock>
 
             <SettingBlock
-              eyebrow="🇺🇸 🇬🇧 🇦🇺 English transcripts only"
-              title="Filler words"
-              description='Vocal disfluencies or hesitations such as "um", "ah", and "hmm" are used to give the speaker time to think or express uncertainty.'
+              eyebrow="🇺🇸 🇬🇧 🇦🇺 Chỉ áp dụng cho transcript tiếng Anh"
+              title="Từ đệm khi nói"
+              description='Các âm ngập ngừng như "um", "ah" và "hmm" có thể được giữ lại hoặc bỏ qua trong transcript.'
             >
               <select
                 value={settings.fillerWords}
@@ -232,19 +232,19 @@ function TranscriptionSettingsPage() {
                     fillerWords: event.target.value as BinarySetting,
                   }))
                 }
-                className="w-full rounded-md border border-border bg-background px-3 py-3 text-sm font-semibold outline-none transition focus:border-primary"
+                className="w-full rounded-md border border-border bg-[#fbf8ef] px-3 py-2.5 text-sm font-semibold outline-none transition focus:border-primary"
               >
                 <option value="yes">
-                  YES: Transcribe filler words (default)
+                  CÓ: Giữ từ đệm trong transcript (mặc định)
                 </option>
-                <option value="no">NO: Do not transcribe filler words</option>
+                <option value="no">KHÔNG: Bỏ qua từ đệm</option>
               </select>
             </SettingBlock>
 
             <SettingBlock
-              eyebrow="🇺🇸 🇬🇧 🇪🇸 🇲🇽 🇮🇹 English, Spanish, and Italian transcripts only"
-              title="Profanity filter"
-              description="Obscure profanity by displaying only the initial letter followed by asterisks. This keeps transcript text appropriate for audiences."
+              eyebrow="🇺🇸 🇬🇧 🇪🇸 🇲🇽 🇮🇹 Áp dụng cho tiếng Anh, Tây Ban Nha và Ý"
+              title="Bộ lọc từ nhạy cảm"
+              description="Ẩn từ nhạy cảm bằng cách chỉ hiển thị chữ cái đầu và các dấu sao, giúp transcript phù hợp hơn khi chia sẻ."
             >
               <select
                 value={settings.profanityFilter}
@@ -254,22 +254,22 @@ function TranscriptionSettingsPage() {
                     profanityFilter: event.target.value as BinarySetting,
                   }))
                 }
-                className="w-full rounded-md border border-border bg-background px-3 py-3 text-sm font-semibold outline-none transition focus:border-primary"
+                className="w-full rounded-md border border-border bg-[#fbf8ef] px-3 py-2.5 text-sm font-semibold outline-none transition focus:border-primary"
               >
                 <option value="no">
-                  NO: Transcribe profane words (default)
+                  KHÔNG: Giữ nguyên từ nhạy cảm (mặc định)
                 </option>
-                <option value="yes">YES: Obscure profane words</option>
+                <option value="yes">CÓ: Ẩn từ nhạy cảm</option>
               </select>
             </SettingBlock>
           </div>
 
-          <div className="mt-4 flex items-start gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-muted-foreground">
+          <div className="mt-4 flex items-start gap-2 rounded-lg border border-border bg-[#fbf8ef] px-4 py-3 text-sm text-muted-foreground">
             <Languages className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
             <p>
-              Các lựa chọn này được lưu theo tài khoản. Với Deepgram, filler
-              words và profanity filter được áp dụng trực tiếp khi transcribe;
-              spelling/timecode được giữ làm cài đặt workflow cho giao diện.
+              Các lựa chọn được lưu theo từng tài khoản và áp dụng cho những
+              transcript mới. Một số cài đặt có thể phụ thuộc vào nhà cung cấp
+              nhận dạng giọng nói mà doanh nghiệp đang sử dụng.
             </p>
           </div>
 
@@ -291,7 +291,7 @@ function TranscriptionSettingsPage() {
               className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-55"
             >
               <Check className="h-4 w-4" />
-              {saving ? "SAVING..." : "SAVE TRANSCRIPTION SETTINGS"}
+              {saving ? "ĐANG LƯU..." : "LƯU CÀI ĐẶT TRANSCRIPT"}
             </button>
             <button
               onClick={() => {
@@ -299,21 +299,18 @@ function TranscriptionSettingsPage() {
                 setMessage("");
                 setError("");
               }}
-              className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-card/70 px-5 py-3 text-sm font-black text-muted-foreground transition hover:border-primary/50 hover:text-primary"
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-white px-5 py-3 text-sm font-black text-muted-foreground transition hover:border-primary/50 hover:text-primary"
             >
               <X className="h-4 w-4" />
-              CANCEL
+              HỦY
             </button>
           </div>
         </section>
 
-        <SonixPreferencesSidebar
-          active="transcription"
-          firstName={user.firstName}
-        />
+        <VbeePreferencesSidebar firstName={user.firstName} />
       </main>
 
-      <SonixPreferencesFooter />
+      <VbeePreferencesFooter />
     </div>
   );
 }

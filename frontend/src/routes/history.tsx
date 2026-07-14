@@ -456,25 +456,25 @@ function HistoryPage() {
   ).length;
 
   return (
-    <div className="relative min-h-screen bg-background overflow-x-hidden">
-      <div className="absolute inset-0 bg-gradient-hero pointer-events-none" />
-      <div className="absolute top-[8%] left-[4%] h-80 w-80 rounded-full bg-primary/15 blur-3xl animate-float pointer-events-none" />
+    <div className="relative min-h-screen overflow-x-hidden bg-background">
+      <div className="absolute inset-0 bg-gradient-hero opacity-45 pointer-events-none" />
+      <div className="absolute top-[8%] left-[4%] hidden h-80 w-80 rounded-full bg-primary/15 blur-3xl animate-float pointer-events-none" />
       <div
-        className="absolute bottom-[6%] right-[4%] h-64 w-64 rounded-full bg-primary/10 blur-3xl animate-float pointer-events-none"
+        className="absolute bottom-[6%] right-[4%] hidden h-64 w-64 rounded-full bg-primary/10 blur-3xl animate-float pointer-events-none"
         style={{ animationDelay: "1.5s" }}
       />
 
       <AuthenticatedHeader />
 
-      <main className="relative z-10 mx-auto max-w-5xl px-6 py-10">
+      <main className="relative z-10 mx-auto max-w-5xl px-4 py-6 md:px-6">
         {/* Heading */}
-        <div className="mb-8">
+        <div className="mb-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-medium text-primary mb-4">
             <History className="h-3 w-3" /> Lịch sử chuyển đổi
           </div>
-          <h1 className="text-4xl font-bold text-foreground">
+          <h1 className="text-2xl font-bold text-foreground md:text-3xl">
             Lịch sử{" "}
-            <span className="font-display text-primary text-5xl">của bạn</span>
+            <span className="font-display text-primary">của bạn</span>
           </h1>
           <p className="mt-2 text-muted-foreground">
             Tất cả bản chuyển đổi gần đây — nhấn để xem, chỉnh sửa hoặc nghe
@@ -489,7 +489,7 @@ function HistoryPage() {
               placeholder="Tìm theo tên file hoặc nội dung..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-full border border-border bg-card/60 py-2.5 pl-10 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition"
+              className="w-full rounded-full border border-border bg-white py-2.5 pl-10 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition"
             />
             {search && (
               <button
@@ -511,9 +511,9 @@ function HistoryPage() {
           )}
         </div>
 
-        <div className="mb-3 flex items-center justify-center rounded-md border border-border bg-card/75 px-4 py-2 text-sm font-bold text-foreground/85 shadow-soft">
+        <div className="mb-3 flex items-center justify-center rounded-md border border-border bg-white px-4 py-2 text-sm font-bold text-foreground/85 shadow-soft">
           <Home className="mr-2 h-4 w-4 text-primary" />
-          History
+          Lịch sử transcript
         </div>
 
         <div className="mb-5 grid grid-cols-[1fr_1fr_44px] gap-2 sm:flex">
@@ -522,20 +522,19 @@ function HistoryPage() {
             className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
           >
             <Upload className="h-4 w-4" />
-            UPLOAD
+            TẢI FILE
           </Link>
           <Link
             to="/record"
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-card/70 px-5 py-3 text-sm font-black text-foreground transition hover:border-primary/50 hover:text-primary"
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-white px-4 py-2.5 text-sm font-black text-foreground transition hover:border-primary/50 hover:text-primary"
           >
             <Mic className="h-4 w-4" />
-            RECORD
+            GHI ÂM
           </Link>
           <Link
-            to="/dashboard"
-            search={{ token: undefined }}
-            className="inline-flex h-12 w-12 items-center justify-center rounded-md border border-border bg-card/70 text-muted-foreground transition hover:border-primary/50 hover:text-primary"
-            title="Workspace"
+            to="/upload"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-white text-muted-foreground transition hover:border-primary/50 hover:text-primary"
+            title="Tải file lên"
           >
             <FolderPlus className="h-4 w-4" />
           </Link>
@@ -544,13 +543,13 @@ function HistoryPage() {
         <div className="mb-6 grid gap-3 md:grid-cols-4">
           {[
             ["Total files", String(filtered.length)],
-            ["Transcribed", String(filtered.length)],
+            ["Đã chuyển đổi", String(filtered.length)],
             ["Recordings", String(recordingCount)],
-            ["Duration", formatDuration(totalDuration)],
+            ["Thời lượng", formatDuration(totalDuration)],
           ].map(([label, value]) => (
             <div
               key={label}
-              className="rounded-xl border border-border bg-card/75 px-4 py-3 shadow-soft"
+              className="rounded-lg border border-border bg-white px-4 py-3 shadow-soft"
             >
               <p className="text-xs font-black uppercase tracking-[0.14em] text-muted-foreground">
                 {label}
@@ -562,11 +561,11 @@ function HistoryPage() {
 
         {/* List */}
         {loading ? (
-          <div className="flex justify-center py-20">
+          <div className="flex justify-center py-12">
             <span className="h-10 w-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center gap-4 py-20 text-center">
+          <div className="flex flex-col items-center gap-4 py-12 text-center">
             <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 border border-primary/20">
               <History className="h-10 w-10 text-primary/50" />
             </div>
@@ -588,7 +587,7 @@ function HistoryPage() {
                 </Link>
                 <Link
                   to="/record"
-                  className="rounded-full bg-gradient-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow-glow hover:opacity-90 transition"
+                  className="rounded-full bg-gradient-primary px-5 py-2 text-sm font-semibold text-[#21104a] shadow-glow hover:opacity-90 transition"
                 >
                   Ghi âm
                 </Link>
@@ -596,7 +595,7 @@ function HistoryPage() {
             )}
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3">
             {filtered.map((item) => {
               const isOpen = expanded === item.id;
               const hasWords =
@@ -606,13 +605,13 @@ function HistoryPage() {
               return (
                 <div
                   key={item.id}
-                  className={`relative overflow-hidden rounded-2xl border bg-card transition-all duration-200
+                  className={`relative overflow-hidden rounded-lg border bg-white transition-all duration-200
                     ${isOpen ? "border-primary/40 shadow-glow" : "border-border hover:border-primary/30"}`}
                 >
                   <div className="absolute inset-0 bg-gradient-to-br from-primary/3 via-transparent to-transparent pointer-events-none" />
 
                   {/* Row header */}
-                  <div className="relative flex items-center gap-3 px-5 py-4">
+                  <div className="relative flex items-center gap-3 px-4 py-3">
                     <button
                       onClick={() => setExpanded(isOpen ? null : item.id)}
                       className="flex flex-1 items-center gap-4 text-left min-w-0"
@@ -660,7 +659,7 @@ function HistoryPage() {
 
                     <span className="hidden min-w-32 items-center justify-center gap-2 rounded-md bg-emerald-500 px-3 py-2 text-xs font-black text-white sm:inline-flex">
                       <Check className="h-3.5 w-3.5" />
-                      Transcribed
+                      Đã chuyển đổi
                     </span>
 
                     <div className="flex items-center gap-1 shrink-0">
@@ -729,7 +728,7 @@ function HistoryPage() {
                         }
                       />
 
-                      <div className="rounded-2xl border border-border bg-background/60 px-5 py-4">
+                      <div className="rounded-lg border border-border bg-[#fbf8ef] px-4 py-3">
                         <p className="text-xs text-muted-foreground mb-2">
                           Văn bản — có thể chỉnh sửa trực tiếp
                         </p>
@@ -749,7 +748,7 @@ function HistoryPage() {
                       </div>
 
                       {item.translated_text && (
-                        <div className="rounded-2xl border border-primary/30 bg-primary/10 px-5 py-4">
+                        <div className="rounded-lg border border-primary/25 bg-primary/5 px-4 py-3">
                           <p className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-primary">
                             Bản dịch{" "}
                             {languageLabel(item.translation_target_language)}
@@ -773,7 +772,7 @@ function HistoryPage() {
                             <button
                               onClick={() => void handleSaveEdit(item.id)}
                               disabled={isSaving}
-                              className="flex items-center gap-1.5 rounded-full bg-gradient-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-glow hover:opacity-90 transition disabled:opacity-60"
+                              className="flex items-center gap-1.5 rounded-full bg-gradient-primary px-4 py-2 text-xs font-semibold text-[#21104a] shadow-glow hover:opacity-90 transition disabled:opacity-60"
                             >
                               {isSaving ? (
                                 <span className="h-3 w-3 rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground animate-spin" />
@@ -818,7 +817,7 @@ function HistoryPage() {
                         </button>
                         <button
                           onClick={() => void handleDownload(item)}
-                          className="flex items-center gap-1.5 rounded-full bg-gradient-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-glow hover:opacity-90 transition"
+                          className="flex items-center gap-1.5 rounded-full bg-gradient-primary px-4 py-2 text-xs font-semibold text-[#21104a] shadow-glow hover:opacity-90 transition"
                         >
                           <Download className="h-3 w-3" /> Tải .docx
                         </button>

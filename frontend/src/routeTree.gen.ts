@@ -11,16 +11,19 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadRouteImport } from './routes/upload'
 import { Route as TranscriptionSettingsRouteImport } from './routes/transcription-settings'
+import { Route as SupportRouteImport } from './routes/support'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ReferralRouteImport } from './routes/referral'
 import { Route as RecordRouteImport } from './routes/record'
 import { Route as RealtimeRouteImport } from './routes/realtime'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HistoryRouteImport } from './routes/history'
-import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CustomDictionaryRouteImport } from './routes/custom-dictionary'
+import { Route as ContactRouteImport } from './routes/contact'
 import { Route as ApiRouteImport } from './routes/api'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CheckoutOrderIdRouteImport } from './routes/checkout.$orderId'
 
@@ -34,9 +37,19 @@ const TranscriptionSettingsRoute = TranscriptionSettingsRouteImport.update({
   path: '/transcription-settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SupportRoute = SupportRouteImport.update({
+  id: '/support',
+  path: '/support',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReferralRoute = ReferralRouteImport.update({
+  id: '/referral',
+  path: '/referral',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RecordRoute = RecordRouteImport.update({
@@ -69,19 +82,24 @@ const HistoryRoute = HistoryRouteImport.update({
   path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const CustomDictionaryRoute = CustomDictionaryRouteImport.update({
   id: '/custom-dictionary',
   path: '/custom-dictionary',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiRoute = ApiRouteImport.update({
   id: '/api',
   path: '/api',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -97,32 +115,38 @@ const CheckoutOrderIdRoute = CheckoutOrderIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/api': typeof ApiRoute
+  '/contact': typeof ContactRoute
   '/custom-dictionary': typeof CustomDictionaryRoute
-  '/dashboard': typeof DashboardRoute
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/realtime': typeof RealtimeRoute
   '/record': typeof RecordRoute
+  '/referral': typeof ReferralRoute
   '/register': typeof RegisterRoute
+  '/support': typeof SupportRoute
   '/transcription-settings': typeof TranscriptionSettingsRoute
   '/upload': typeof UploadRoute
   '/checkout/$orderId': typeof CheckoutOrderIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/api': typeof ApiRoute
+  '/contact': typeof ContactRoute
   '/custom-dictionary': typeof CustomDictionaryRoute
-  '/dashboard': typeof DashboardRoute
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/realtime': typeof RealtimeRoute
   '/record': typeof RecordRoute
+  '/referral': typeof ReferralRoute
   '/register': typeof RegisterRoute
+  '/support': typeof SupportRoute
   '/transcription-settings': typeof TranscriptionSettingsRoute
   '/upload': typeof UploadRoute
   '/checkout/$orderId': typeof CheckoutOrderIdRoute
@@ -130,16 +154,19 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/api': typeof ApiRoute
+  '/contact': typeof ContactRoute
   '/custom-dictionary': typeof CustomDictionaryRoute
-  '/dashboard': typeof DashboardRoute
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/realtime': typeof RealtimeRoute
   '/record': typeof RecordRoute
+  '/referral': typeof ReferralRoute
   '/register': typeof RegisterRoute
+  '/support': typeof SupportRoute
   '/transcription-settings': typeof TranscriptionSettingsRoute
   '/upload': typeof UploadRoute
   '/checkout/$orderId': typeof CheckoutOrderIdRoute
@@ -148,48 +175,57 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/about'
     | '/api'
+    | '/contact'
     | '/custom-dictionary'
-    | '/dashboard'
     | '/history'
     | '/login'
     | '/pricing'
     | '/profile'
     | '/realtime'
     | '/record'
+    | '/referral'
     | '/register'
+    | '/support'
     | '/transcription-settings'
     | '/upload'
     | '/checkout/$orderId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/about'
     | '/api'
+    | '/contact'
     | '/custom-dictionary'
-    | '/dashboard'
     | '/history'
     | '/login'
     | '/pricing'
     | '/profile'
     | '/realtime'
     | '/record'
+    | '/referral'
     | '/register'
+    | '/support'
     | '/transcription-settings'
     | '/upload'
     | '/checkout/$orderId'
   id:
     | '__root__'
     | '/'
+    | '/about'
     | '/api'
+    | '/contact'
     | '/custom-dictionary'
-    | '/dashboard'
     | '/history'
     | '/login'
     | '/pricing'
     | '/profile'
     | '/realtime'
     | '/record'
+    | '/referral'
     | '/register'
+    | '/support'
     | '/transcription-settings'
     | '/upload'
     | '/checkout/$orderId'
@@ -197,16 +233,19 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRoute
   ApiRoute: typeof ApiRoute
+  ContactRoute: typeof ContactRoute
   CustomDictionaryRoute: typeof CustomDictionaryRoute
-  DashboardRoute: typeof DashboardRoute
   HistoryRoute: typeof HistoryRoute
   LoginRoute: typeof LoginRoute
   PricingRoute: typeof PricingRoute
   ProfileRoute: typeof ProfileRoute
   RealtimeRoute: typeof RealtimeRoute
   RecordRoute: typeof RecordRoute
+  ReferralRoute: typeof ReferralRoute
   RegisterRoute: typeof RegisterRoute
+  SupportRoute: typeof SupportRoute
   TranscriptionSettingsRoute: typeof TranscriptionSettingsRoute
   UploadRoute: typeof UploadRoute
   CheckoutOrderIdRoute: typeof CheckoutOrderIdRoute
@@ -228,11 +267,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TranscriptionSettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/support': {
+      id: '/support'
+      path: '/support'
+      fullPath: '/support'
+      preLoaderRoute: typeof SupportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/register': {
       id: '/register'
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/referral': {
+      id: '/referral'
+      path: '/referral'
+      fullPath: '/referral'
+      preLoaderRoute: typeof ReferralRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/record': {
@@ -277,13 +330,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/custom-dictionary': {
       id: '/custom-dictionary'
       path: '/custom-dictionary'
@@ -291,11 +337,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CustomDictionaryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api': {
       id: '/api'
       path: '/api'
       fullPath: '/api'
       preLoaderRoute: typeof ApiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -317,16 +377,19 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
   ApiRoute: ApiRoute,
+  ContactRoute: ContactRoute,
   CustomDictionaryRoute: CustomDictionaryRoute,
-  DashboardRoute: DashboardRoute,
   HistoryRoute: HistoryRoute,
   LoginRoute: LoginRoute,
   PricingRoute: PricingRoute,
   ProfileRoute: ProfileRoute,
   RealtimeRoute: RealtimeRoute,
   RecordRoute: RecordRoute,
+  ReferralRoute: ReferralRoute,
   RegisterRoute: RegisterRoute,
+  SupportRoute: SupportRoute,
   TranscriptionSettingsRoute: TranscriptionSettingsRoute,
   UploadRoute: UploadRoute,
   CheckoutOrderIdRoute: CheckoutOrderIdRoute,

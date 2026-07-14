@@ -261,40 +261,39 @@ function ApiPage() {
       <AuthenticatedHeader />
 
       <section className="relative overflow-hidden bg-gradient-hero text-foreground">
-        <div className="absolute -left-24 top-10 h-72 w-72 rounded-full bg-primary/25 blur-3xl" />
-        <div className="absolute -right-16 bottom-0 h-80 w-80 rounded-full bg-primary/10 blur-3xl" />
-        <div className="mx-auto grid max-w-7xl gap-10 px-4 py-16 md:grid-cols-[1fr_.85fr] md:px-6 md:py-20">
+        <div className="absolute -left-24 top-10 h-56 w-56 rounded-full bg-[#ffcb05]/18 blur-3xl" />
+        <div className="absolute -right-16 bottom-0 h-56 w-56 rounded-full bg-[#21104a]/8 blur-3xl" />
+        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 md:grid-cols-[1fr_.85fr] md:px-6 md:py-12">
           <div className="relative z-10">
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary">
               <PlugZap className="h-4 w-4" /> Vbee Speech to Text API
             </div>
-            <h1 className="max-w-3xl text-4xl font-black leading-tight md:text-6xl">
+            <h1 className="max-w-3xl text-2xl font-black leading-tight md:text-3xl">
               Tích hợp chuyển âm thanh thành văn bản vào sản phẩm của bạn.
             </h1>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-              Trang này đã có đủ backend API, tạo key, thu hồi key, endpoint
-              test và ví dụ code. Bạn chỉ cần cấu hình SONIX_API_KEY,
-              DEEPGRAM_API_KEY hoặc ASSEMBLYAI_API_KEY trong backend/.env để bắt
-              đầu xử lý file thật.
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-muted-foreground">
+              Tạo và thu hồi API key, kiểm thử endpoint và tham khảo ví dụ tích
+              hợp ngay tại đây. Đội kỹ thuật cấu hình nhà cung cấp nhận dạng
+              giọng nói phù hợp trong môi trường máy chủ để bắt đầu xử lý file.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <a
                 href="#keys"
-                className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 font-black text-primary-foreground shadow-glow"
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 font-black text-primary-foreground shadow-glow"
               >
                 Tạo API key <ArrowRight className="h-4 w-4" />
               </a>
               <a
                 href="#docs"
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-card/70 px-6 py-3 font-black text-foreground hover:bg-primary/10"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-5 py-2.5 font-black text-foreground hover:bg-primary/5"
               >
                 Xem tài liệu <Code2 className="h-4 w-4" />
               </a>
             </div>
           </div>
 
-          <div className="relative z-10 rounded-[2rem] border border-border bg-card p-4 text-foreground shadow-soft">
-            <div className="rounded-[1.5rem] bg-background/45 p-5">
+          <div className="relative z-10 rounded-lg border border-border bg-white p-4 text-foreground shadow-soft">
+            <div className="rounded-lg bg-[#fbf8ef] p-4">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -308,21 +307,21 @@ function ApiPage() {
                   </div>
                 </div>
                 <span className="rounded-full bg-[#dcfce7] px-3 py-1 text-xs font-black text-[#166534]">
-                  Ready
+                  Sẵn sàng
                 </span>
               </div>
-              <pre className="overflow-x-auto rounded-2xl bg-background p-4 text-xs leading-6 text-primary">
+              <pre className="overflow-x-auto rounded-lg bg-white p-4 text-xs leading-6 text-primary">
                 <code>{curlSample}</code>
               </pre>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 {[
                   [ShieldCheck, "Key bảo mật", "Lưu hash SHA-256"],
                   [FileAudio, "Audio upload", "MP3, WAV, M4A, MP4"],
-                  [Zap, "3 provider", "Sonix, Deepgram, AssemblyAI"],
+                  [Zap, "Provider linh hoạt", "Deepgram, AssemblyAI, Google STT"],
                 ].map(([Icon, title, desc]) => (
                   <div
                     key={String(title)}
-                    className="rounded-2xl border border-border bg-card/80 p-4 shadow-sm"
+                    className="rounded-lg border border-border bg-white p-3 shadow-sm"
                   >
                     <Icon className="mb-2 h-5 w-5 text-primary" />
                     <div className="font-black">{String(title)}</div>
@@ -339,15 +338,15 @@ function ApiPage() {
 
       <section
         id="keys"
-        className="mx-auto grid max-w-7xl gap-6 px-4 py-12 md:grid-cols-[.9fr_1.1fr] md:px-6"
+        className="mx-auto grid max-w-7xl gap-5 px-4 py-10 md:grid-cols-[.9fr_1.1fr] md:px-6"
       >
-        <div className="rounded-[2rem] border border-border bg-card p-6 shadow-soft">
+        <div className="rounded-lg border border-border bg-white p-5 shadow-soft">
           <div className="mb-4 flex items-center gap-3">
             <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
               <KeyRound className="h-6 w-6" />
             </span>
             <div>
-              <h2 className="text-2xl font-black">Tạo API key</h2>
+              <h2 className="text-xl font-black">Tạo API key</h2>
               <p className="text-sm text-muted-foreground">
                 Key đầy đủ chỉ hiện một lần sau khi tạo.
               </p>
@@ -358,13 +357,13 @@ function ApiPage() {
           <input
             value={keyName}
             onChange={(e) => setKeyName(e.target.value)}
-            className="mt-2 w-full rounded-2xl border border-border bg-background/45 px-4 py-3 font-semibold outline-none focus:border-primary"
+            className="mt-2 w-full rounded-lg border border-border bg-[#fbf8ef] px-4 py-2.5 font-semibold outline-none focus:border-primary"
             placeholder="VD: Website chính, Mobile app, CRM..."
           />
           <button
             onClick={createKey}
             disabled={creating}
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 font-black text-primary-foreground shadow-glow disabled:opacity-60"
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 font-black text-primary-foreground shadow-glow disabled:opacity-60"
           >
             {creating ? (
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -375,13 +374,13 @@ function ApiPage() {
           </button>
 
           {message && (
-            <p className="mt-4 rounded-2xl border border-primary/30 bg-primary/10 p-3 text-sm font-bold text-primary">
+            <p className="mt-4 rounded-lg border border-primary/25 bg-primary/5 p-3 text-sm font-bold text-primary">
               {message}
             </p>
           )}
 
           {createdKey && (
-            <div className="mt-5 rounded-2xl border border-primary/40 bg-primary/10 p-4">
+            <div className="mt-5 rounded-lg border border-primary/25 bg-primary/5 p-4">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <span className="font-black text-foreground">
                   API key vừa tạo
@@ -405,10 +404,10 @@ function ApiPage() {
           )}
         </div>
 
-        <div className="rounded-[2rem] border border-border bg-card p-6 shadow-soft">
+        <div className="rounded-lg border border-border bg-white p-5 shadow-soft">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-2xl font-black">Danh sách API key</h2>
+              <h2 className="text-xl font-black">Danh sách API key</h2>
               <p className="text-sm text-muted-foreground">
                 Quản lý key đang hoạt động trong tài khoản của bạn.
               </p>
@@ -426,7 +425,7 @@ function ApiPage() {
 
           <div className="space-y-3">
             {keys.length === 0 && (
-              <div className="rounded-2xl border border-border bg-background/45 p-5 text-sm font-bold text-muted-foreground">
+              <div className="rounded-lg border border-border bg-[#fbf8ef] p-4 text-sm font-bold text-muted-foreground">
                 Chưa có API key. Tạo một key mới để gọi endpoint
                 /api/v1/transcribe.
               </div>
@@ -434,7 +433,7 @@ function ApiPage() {
             {keys.map((item) => (
               <div
                 key={item.id}
-                className="flex flex-col gap-3 rounded-2xl border border-border bg-background/45 p-4 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-lg border border-border bg-[#fbf8ef] p-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
                   <div className="font-black">{item.name}</div>
@@ -460,34 +459,34 @@ function ApiPage() {
 
       <section
         id="docs"
-        className="mx-auto grid max-w-7xl gap-6 px-4 pb-12 md:grid-cols-2 md:px-6"
+        className="mx-auto grid max-w-7xl gap-5 px-4 pb-10 md:grid-cols-2 md:px-6"
       >
         <DocCard title="cURL" code={curlSample} onCopy={copyText} />
         <DocCard title="JavaScript" code={jsSample} onCopy={copyText} />
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 pb-16 md:px-6">
-        <div className="grid gap-6 rounded-[2rem] border border-border bg-card p-5 text-foreground shadow-soft md:grid-cols-[.9fr_1.1fr] md:p-8">
+      <section className="mx-auto max-w-7xl px-4 pb-12 md:px-6">
+        <div className="grid gap-5 rounded-lg border border-border bg-white p-5 text-foreground shadow-soft md:grid-cols-[.9fr_1.1fr] md:p-6">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-black text-primary">
               <UploadCloud className="h-4 w-4" /> Test API thật
             </div>
-            <h2 className="text-3xl font-black">
+            <h2 className="text-xl font-black">
               Gọi thử endpoint bằng API key
             </h2>
             <p className="mt-3 leading-7 text-muted-foreground">
               Chọn file audio/video, nhập API key, sau đó gửi request tới
-              backend. Kết quả trả về là JSON giống khi tích hợp vào website
-              hoặc app riêng.
+              backend. Kết quả trả về là JSON để tích hợp trực tiếp vào website
+              hoặc ứng dụng riêng.
             </p>
           </div>
 
-          <div className="rounded-[1.5rem] border border-border bg-background/45 p-5 text-foreground">
+          <div className="rounded-lg border border-border bg-[#fbf8ef] p-4 text-foreground">
             <label className="text-sm font-black">API key</label>
             <input
               value={testKey}
               onChange={(e) => setTestKey(e.target.value)}
-              className="mt-2 w-full rounded-2xl border border-border bg-card px-4 py-3 font-semibold outline-none focus:border-primary"
+              className="mt-2 w-full rounded-lg border border-border bg-white px-4 py-2.5 font-semibold outline-none focus:border-primary"
               placeholder="vbee_sk_..."
             />
 
@@ -498,7 +497,7 @@ function ApiPage() {
               type="file"
               accept=".mp3,.wav,.m4a,.ogg,.flac,.aac,.mp4,.webm,audio/*,video/*"
               onChange={(e) => setTestFile(e.target.files?.[0] ?? null)}
-              className="mt-2 w-full rounded-2xl border border-dashed border-border bg-card px-4 py-3 text-sm font-semibold"
+              className="mt-2 w-full rounded-lg border border-dashed border-border bg-white px-4 py-2.5 text-sm font-semibold"
             />
 
             <label className="mt-4 flex items-center gap-3 text-sm font-bold text-muted-foreground">
@@ -517,7 +516,7 @@ function ApiPage() {
                 <select
                   value={testLanguage}
                   onChange={(e) => setTestLanguage(e.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-border bg-card px-4 py-3 font-semibold outline-none focus:border-primary"
+                  className="mt-2 w-full rounded-lg border border-border bg-white px-4 py-2.5 font-semibold outline-none focus:border-primary"
                 >
                   {SPEECH_LANGUAGE_OPTIONS.map((item) => (
                     <option key={item.value} value={item.value}>
@@ -531,7 +530,7 @@ function ApiPage() {
                 <select
                   value={testTranslateTo}
                   onChange={(e) => setTestTranslateTo(e.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-border bg-card px-4 py-3 font-semibold outline-none focus:border-primary"
+                  className="mt-2 w-full rounded-lg border border-border bg-white px-4 py-2.5 font-semibold outline-none focus:border-primary"
                 >
                   {TRANSLATION_LANGUAGE_OPTIONS.map((item) => (
                     <option key={item.value} value={item.value}>
@@ -545,7 +544,7 @@ function ApiPage() {
             <button
               onClick={testApi}
               disabled={testing}
-              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 font-black text-primary-foreground shadow-glow disabled:opacity-60"
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 font-black text-primary-foreground shadow-glow disabled:opacity-60"
             >
               {testing ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -557,7 +556,7 @@ function ApiPage() {
 
             {apiResult && (
               <div
-                className={`mt-5 rounded-2xl p-4 ${apiResult.error ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"}`}
+                className={`mt-5 rounded-lg p-4 ${apiResult.error ? "bg-destructive/10 text-destructive" : "bg-primary/5 text-primary"}`}
               >
                 <div className="mb-2 flex items-center gap-2 font-black">
                   {apiResult.error ? (
@@ -589,7 +588,7 @@ function DocCard({
   onCopy: (value: string) => Promise<void>;
 }) {
   return (
-    <div className="rounded-[2rem] border border-border bg-card p-5 shadow-soft">
+    <div className="rounded-lg border border-border bg-white p-4 shadow-soft">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xl font-black">
           <Code2 className="h-5 w-5" /> {title}
@@ -601,7 +600,7 @@ function DocCard({
           <Clipboard className="h-4 w-4" /> Copy
         </button>
       </div>
-      <pre className="overflow-x-auto rounded-2xl bg-background p-4 text-xs leading-6 text-primary">
+      <pre className="overflow-x-auto rounded-lg bg-[#fbf8ef] p-4 text-xs leading-6 text-primary">
         <code>{code}</code>
       </pre>
     </div>
