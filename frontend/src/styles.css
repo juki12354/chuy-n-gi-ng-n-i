@@ -30,37 +30,64 @@
   --color-ring: var(--ring);
   --font-display: "Be Vietnam Pro", system-ui, sans-serif;
   --font-sans: "Be Vietnam Pro", system-ui, sans-serif;
+
+  /* Compact Vbee type scale: clear hierarchy without oversized dashboard copy. */
+  --text-xs: 0.6875rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-lg: 1rem;
+  --text-lg--line-height: 1.5rem;
+  --text-xl: 1.125rem;
+  --text-xl--line-height: 1.625rem;
+  --text-2xl: 1.3125rem;
+  --text-2xl--line-height: 1.75rem;
+  --text-3xl: 1.5625rem;
+  --text-3xl--line-height: 2rem;
+  --text-4xl: 1.875rem;
+  --text-4xl--line-height: 2.25rem;
+  --text-5xl: 2.25rem;
+  --text-5xl--line-height: 2.625rem;
+  --text-6xl: 2.625rem;
+  --text-6xl--line-height: 3rem;
+  --font-weight-bold: 700;
+  --font-weight-black: 800;
+  --tracking-tight: 0em;
+  --tracking-wide: 0em;
+  --tracking-widest: 0em;
 }
 
 :root {
-  --radius: 1rem;
+  --radius: 0.5rem;
 
-  /* Vbee-inspired palette: deep purple + golden yellow */
-  --background: #21104a;
-  --foreground: #ffffff;
-  --card: #2b155f;
-  --card-foreground: #ffffff;
-  --popover: #2b155f;
-  --popover-foreground: #ffffff;
-  --primary: #ffcb05;
-  --primary-foreground: #21104a;
-  --primary-glow: #ffe36b;
-  --secondary: #f8f5ff;
+  /* Vbee palette: deep purple for identity, clean white for work, yellow for action. */
+  --background: #ffffff;
+  --foreground: #21104a;
+  --card: #ffffff;
+  --card-foreground: #21104a;
+  --popover: #ffffff;
+  --popover-foreground: #21104a;
+  --primary: #21104a;
+  --primary-foreground: #ffffff;
+  --primary-glow: #4b2d85;
+  --secondary: #f7f5ff;
   --secondary-foreground: #21104a;
-  --muted: #32166f;
-  --muted-foreground: #cabee9;
+  --muted: #f0edfa;
+  --muted-foreground: #6a5a8f;
   --accent: #ffcb05;
   --accent-foreground: #21104a;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: rgba(255, 255, 255, 0.14);
-  --input: rgba(255, 255, 255, 0.08);
+  --border: #e5e0f0;
+  --input: #e5e0f0;
   --ring: #ffcb05;
 
-  --gradient-hero: radial-gradient(circle at 12% 18%, rgba(255, 203, 5, 0.22), transparent 28%), radial-gradient(circle at 85% 10%, rgba(122, 90, 255, 0.32), transparent 32%), linear-gradient(135deg, #17092f 0%, #21104a 45%, #33146d 100%);
+  --gradient-hero: radial-gradient(circle at 12% 18%, rgba(255, 203, 5, 0.2), transparent 28%), radial-gradient(circle at 85% 10%, rgba(68, 40, 128, 0.13), transparent 32%), linear-gradient(135deg, #ffffff 0%, #f7f5ff 55%, #ffffff 100%);
   --gradient-primary: linear-gradient(135deg, #ffcb05 0%, #ffe36b 100%);
-  --shadow-glow: 0 20px 80px -20px rgba(255, 203, 5, 0.55);
-  --shadow-soft: 0 18px 60px -18px rgba(0, 0, 0, 0.45);
+  --shadow-glow: 0 10px 24px -16px rgba(255, 203, 5, 0.48);
+  --shadow-soft: 0 12px 34px -24px rgba(33, 16, 74, 0.28);
 }
 
 @layer base {
@@ -73,9 +100,12 @@
   }
 
   body {
+    min-width: 320px;
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     text-rendering: geometricPrecision;
   }
@@ -87,9 +117,58 @@
     font-family: inherit;
   }
 
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 3px solid rgba(255, 203, 5, 0.56);
+    outline-offset: 3px;
+  }
+
   ::selection {
     background: rgba(255, 203, 5, 0.35);
     color: #21104a;
+  }
+}
+
+@layer utilities {
+  .tracking-tight,
+  .tracking-wide,
+  .tracking-wider,
+  .tracking-widest,
+  [class*="tracking-["] {
+    letter-spacing: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  .vbee-surface,
+  .vbee-surface-dark {
+    border-radius: 0.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
@@ -110,7 +189,7 @@
 }
 
 @utility vbee-page-band {
-  background: linear-gradient(180deg, #f8f5ff 0%, #ffffff 100%);
+  background: linear-gradient(180deg, #f7f5ff 0%, #ffffff 100%);
   color: var(--secondary-foreground);
 }
 
@@ -122,25 +201,25 @@
 }
 
 @utility vbee-surface {
-  border: 1px solid rgba(33, 16, 74, 0.1);
-  background: rgba(255, 255, 255, 0.94);
-  border-radius: 1.5rem;
-  box-shadow: 0 18px 55px rgba(33, 16, 74, 0.08);
+  border: 1px solid #e5e0f0;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 0.625rem;
+  box-shadow: 0 8px 24px rgba(33, 16, 74, 0.05);
 }
 
 @utility vbee-surface-dark {
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: linear-gradient(145deg, #21104a 0%, #32166f 100%);
-  border-radius: 1.5rem;
+  border-radius: 0.75rem;
   box-shadow: var(--shadow-soft);
 }
 
 @utility vbee-token-card {
-  border: 1px solid rgba(33, 16, 74, 0.1);
+  border: 1px solid #e5e0f0;
   background: #ffffff;
-  border-radius: 1rem;
-  padding: 0.875rem;
-  box-shadow: 0 12px 32px rgba(33, 16, 74, 0.06);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  box-shadow: 0 6px 18px rgba(33, 16, 74, 0.045);
 }
 
 @utility vbee-chip {
@@ -179,13 +258,13 @@
   background: var(--gradient-primary);
   color: #21104a;
   font-weight: 900;
-  box-shadow: 0 14px 38px rgba(255, 203, 5, 0.28);
+  box-shadow: 0 10px 26px rgba(255, 203, 5, 0.22);
   transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
 
   &:hover {
     transform: translateY(-2px);
     filter: brightness(1.02);
-    box-shadow: 0 20px 48px rgba(255, 203, 5, 0.36);
+    box-shadow: 0 14px 34px rgba(255, 203, 5, 0.28);
   }
 }
 
@@ -264,19 +343,19 @@
 
 @utility scrollbar-primary {
   scrollbar-width: thin;
-  scrollbar-color: var(--primary) #17092f;
+  scrollbar-color: #21104a #fbf8ef;
   &::-webkit-scrollbar {
     width: 7px;
   }
   &::-webkit-scrollbar-track {
-    background: #17092f;
+    background: #f7f5ff;
     border-radius: 999px;
   }
   &::-webkit-scrollbar-thumb {
-    background: var(--primary);
+    background: #d7cbe9;
     border-radius: 999px;
   }
   &::-webkit-scrollbar-thumb:hover {
-    background: var(--primary-glow);
+    background: #21104a;
   }
 }

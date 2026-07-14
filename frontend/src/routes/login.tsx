@@ -91,47 +91,42 @@ function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen bg-background overflow-hidden flex flex-col items-center justify-center px-4 py-12">
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background px-4 py-8">
       <div className="absolute inset-0 bg-gradient-hero pointer-events-none" />
-      <div className="absolute top-[15%] left-[12%] h-72 w-72 rounded-full bg-primary/20 blur-3xl animate-float pointer-events-none" />
-      <div className="absolute bottom-[10%] right-[8%] h-56 w-56 rounded-full bg-primary/15 blur-3xl animate-float pointer-events-none" style={{ animationDelay: "1.4s" }} />
-      <div className="absolute top-[55%] left-[70%] h-36 w-36 rounded-full bg-primary/25 blur-2xl animate-float pointer-events-none" style={{ animationDelay: "0.7s" }} />
+      <div className="absolute top-[15%] left-[12%] h-56 w-56 rounded-full bg-[#ffcb05]/18 blur-3xl pointer-events-none" />
+      <div className="absolute bottom-[10%] right-[8%] h-44 w-44 rounded-full bg-[#21104a]/8 blur-3xl pointer-events-none" />
 
       {SPARKLES.map((s, i) => (
-        <span key={i} className={`absolute ${s.size} rounded-full bg-primary animate-twinkle pointer-events-none`} style={{ top: s.top, left: s.left, animationDelay: `${s.delay}s` }} />
+        <span key={i} className={`absolute ${s.size} hidden rounded-full bg-primary animate-twinkle pointer-events-none`} style={{ top: s.top, left: s.left, animationDelay: `${s.delay}s` }} />
       ))}
 
-      <div className="relative z-10 grid w-full max-w-5xl gap-10 lg:grid-cols-[0.95fr_1.05fr] items-center">
+      <div className="relative z-10 grid w-full max-w-5xl items-center gap-8 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="flex flex-col items-center lg:items-start text-center lg:text-left">
-          <div className="relative flex h-44 w-44 items-center justify-center mb-6">
-            <span className="absolute inset-0 rounded-full border border-primary/40 animate-pulse-ring" />
-            <span className="absolute inset-0 rounded-full border border-primary/25 animate-pulse-ring" style={{ animationDelay: "0.8s" }} />
-            <span className="absolute inset-0 rounded-full border border-primary/12 animate-pulse-ring" style={{ animationDelay: "1.6s" }} />
-            <div className="absolute inset-6 rounded-full bg-primary/10" />
-            <img src={vbeeLogo} alt="Vbee" className="relative h-32 w-auto object-contain animate-float drop-shadow-[0_6px_24px_rgba(250,200,60,0.5)]" />
+          <div className="relative mb-5 flex h-28 w-44 items-center justify-center">
+            <img src={vbeeLogo} alt="Vbee" className="relative h-24 w-auto object-contain" />
           </div>
 
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-medium text-primary mb-4">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#e8decc] bg-white px-4 py-1.5 text-xs font-bold text-[#725a00]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#ffcb05]" />
             Chào mừng quay trở lại
           </div>
-          <h1 className="text-4xl font-bold text-foreground leading-tight md:text-5xl">
-            Đăng nhập vào <span className="font-display text-primary block mt-1">Vbee AIVoice</span>
+          <h1 className="text-2xl font-black leading-tight text-foreground md:text-3xl">
+            Đăng nhập vào <span className="mt-1 block text-[#21104a]">Vbee AIVoice</span>
           </h1>
           <p className="mt-4 text-sm text-muted-foreground max-w-sm">
             Dùng email/password để vào dashboard ngay. Google Login vẫn hỗ trợ khi bạn cấu hình OAuth.
           </p>
 
-          <div className="mt-7 grid grid-cols-3 gap-3 w-full max-w-sm">
-            <div className="rounded-2xl border border-border bg-card/80 p-4 text-center">
+          <div className="mt-6 grid w-full max-w-sm grid-cols-3 gap-2">
+            <div className="rounded-lg border border-border bg-white p-3 text-center">
               <div className="text-xl font-bold text-foreground">50+</div>
               <div className="text-xs text-muted-foreground">Ngôn ngữ</div>
             </div>
-            <div className="rounded-2xl border border-border bg-card/80 p-4 text-center">
+            <div className="rounded-lg border border-border bg-white p-3 text-center">
               <div className="text-xl font-bold text-foreground">~3s</div>
               <div className="text-xs text-muted-foreground">Xử lý</div>
             </div>
-            <div className="rounded-2xl border border-border bg-card/80 p-4 text-center">
+            <div className="rounded-lg border border-border bg-white p-3 text-center">
               <div className="text-xl font-bold text-foreground">98%</div>
               <div className="text-xs text-muted-foreground">Chính xác</div>
             </div>
@@ -139,8 +134,8 @@ function LoginPage() {
         </div>
 
         <div className="w-full">
-          <div className="rounded-3xl border border-border bg-card/85 backdrop-blur-sm p-7 shadow-soft">
-            <div className="mb-6">
+          <div className="rounded-lg border border-border bg-white p-5 shadow-soft md:p-6">
+            <div className="mb-5">
               <h2 className="text-2xl font-bold text-foreground">Đăng nhập</h2>
               <p className="mt-1 text-sm text-muted-foreground">Nhập tài khoản đã đăng ký để tiếp tục</p>
             </div>
@@ -195,7 +190,7 @@ function LoginPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="group w-full flex items-center justify-center gap-2 rounded-full bg-gradient-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-glow hover:opacity-90 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                className="group w-full flex items-center justify-center gap-2 rounded-full bg-gradient-primary py-3 text-sm font-black text-[#21104a] shadow-glow hover:opacity-90 transition disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? <span className="h-4 w-4 rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground animate-spin" /> : <LogIn className="h-4 w-4" />}
                 {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
@@ -226,10 +221,6 @@ function LoginPage() {
               )}
               <span>{isRedirecting ? "Đang chuyển hướng..." : "Đăng nhập bằng Google"}</span>
             </button>
-
-            <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-xs text-muted-foreground">
-              Tài khoản demo sau khi backend khởi động: <span className="font-semibold text-foreground">demo@vbee.local</span> / <span className="font-semibold text-foreground">123456</span>
-            </div>
 
             <p className="mt-4 text-center text-sm text-muted-foreground">
               Chưa có tài khoản?{" "}

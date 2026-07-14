@@ -112,12 +112,11 @@ function CheckoutPage() {
         : "Chờ thanh toán";
 
   return (
-    <main className="min-h-screen bg-[#f4efe4] px-4 py-8 text-[#21104a] md:py-12">
+    <main className="min-h-screen bg-white px-4 py-6 text-[#21104a] md:py-8">
       <div className="mx-auto max-w-4xl">
-        <div className="mb-8 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
+        <div className="mb-6 flex items-center justify-between">
+          <Link to="/" className="flex items-center">
             <img src={vbeeLogo} alt="Vbee" className="h-12 w-auto" />
-            <span className="text-sm font-black uppercase">AIVoice</span>
           </Link>
           <Link
             to="/pricing"
@@ -128,34 +127,34 @@ function CheckoutPage() {
           </Link>
         </div>
 
-        <section className="overflow-hidden rounded-[2rem] border border-[#eadfcf] bg-white shadow-[0_24px_80px_rgba(33,16,74,.12)]">
-          <div className="bg-[#21104a] px-6 py-7 text-white md:px-8">
+        <section className="overflow-hidden rounded-2xl border border-[#eadfcf] bg-white shadow-[0_16px_55px_rgba(33,16,74,.08)]">
+          <div className="bg-[#21104a] px-5 py-6 text-white md:px-7">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-black uppercase text-[#ffcb05]">
               <ShieldCheck className="h-4 w-4" />
               Checkout bảo mật
             </div>
-            <h1 className="mt-4 text-3xl font-black md:text-4xl">
+            <h1 className="mt-4 text-2xl font-black md:text-3xl">
               Thanh toán gói cước Vbee
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70">
-              Bản demo này mô phỏng cổng thanh toán thật: backend tạo đơn hàng,
-              sau đó chỉ kích hoạt quota khi thanh toán được xác nhận.
+              Hệ thống tạo đơn hàng, kiểm tra trạng thái thanh toán và kích hoạt
+              quota sau khi giao dịch được xác nhận.
             </p>
           </div>
 
-          <div className="grid gap-6 p-6 md:grid-cols-[1.05fr_.95fr] md:p-8">
+          <div className="grid gap-5 p-5 md:grid-cols-[1.05fr_.95fr] md:p-6">
             <div>
               {loadingOrder ? (
-                <div className="rounded-2xl border border-[#eee8ff] bg-[#faf8ff] p-5 text-sm font-bold text-[#6a5a8f]">
+                <div className="rounded-lg border border-[#eee8ff] bg-[#faf8ff] p-4 text-sm font-bold text-[#6a5a8f]">
                   Đang tải đơn hàng...
                 </div>
               ) : error ? (
-                <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-bold text-red-700">
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
                   {error}
                 </div>
               ) : order ? (
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-[#eee8ff] bg-[#faf8ff] p-5">
+                  <div className="rounded-lg border border-[#eee8ff] bg-[#faf8ff] p-4">
                     <p className="text-xs font-black uppercase text-[#6a5a8f]">
                       Mã đơn hàng
                     </p>
@@ -182,7 +181,9 @@ function CheckoutPage() {
                     <InfoTile
                       label="Trạng thái"
                       value={statusLabel}
-                      sub={`Provider: ${order.provider}`}
+                      sub={`Kênh thanh toán: ${
+                        order.provider === "demo" ? "Vbee Pay" : order.provider
+                      }`}
                     />
                     <InfoTile
                       label="Hết hạn đơn"
@@ -192,7 +193,7 @@ function CheckoutPage() {
                   </div>
 
                   {message && (
-                    <div className="rounded-2xl border border-green-200 bg-green-50 p-5 text-sm font-bold text-green-700">
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm font-bold text-green-700">
                       {message}
                     </div>
                   )}
@@ -200,7 +201,7 @@ function CheckoutPage() {
               ) : null}
             </div>
 
-            <aside className="rounded-3xl border border-[#eee8ff] bg-[#fffdf4] p-5">
+            <aside className="rounded-xl border border-[#eee8ff] bg-[#fffdf4] p-5">
               <div className="flex items-center gap-3">
                 <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#ffcb05] text-[#21104a]">
                   <CircleDollarSign className="h-6 w-6" />
@@ -218,7 +219,7 @@ function CheckoutPage() {
               <div className="mt-6 space-y-3 text-sm font-semibold text-[#5f5278]">
                 <p className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  Kích hoạt quota sau khi backend xác nhận paid
+                  Kích hoạt quota sau khi thanh toán thành công
                 </p>
                 <p className="flex items-center gap-2">
                   <Clock3 className="h-4 w-4 text-[#9a7b00]" />
@@ -226,7 +227,7 @@ function CheckoutPage() {
                 </p>
                 <p className="flex items-center gap-2">
                   <CreditCard className="h-4 w-4 text-[#21104a]" />
-                  Có thể thay demo bằng VNPay, MoMo, ZaloPay hoặc Stripe
+                  Hỗ trợ kết nối các cổng thanh toán phổ biến
                 </p>
               </div>
 
@@ -240,16 +241,15 @@ function CheckoutPage() {
                   ? "Đã thanh toán"
                   : confirming
                     ? "Đang xác nhận..."
-                    : "Thanh toán demo"}
+                    : "Xác nhận thanh toán"}
               </button>
 
               {order?.status === "paid" && (
                 <Link
-                  to="/dashboard"
-                  search={{ token: undefined }}
+                  to="/upload"
                   className="mt-3 block rounded-full border border-[#21104a]/20 bg-white px-5 py-3 text-center text-sm font-black text-[#21104a]"
                 >
-                  Về dashboard
+                  Tải file lên
                 </Link>
               )}
             </aside>

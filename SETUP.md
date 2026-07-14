@@ -62,9 +62,9 @@ DEEPGRAM_UTTERANCES=true
 
 Deepgram API dùng header `Authorization: Token <apiKey>` và nhận file trực tiếp tại `POST https://api.deepgram.com/v1/listen`. Khi bật "nhận diện nhiều người nói" trên app, backend sẽ gửi thêm `diarize=true` hoặc `DEEPGRAM_DIARIZE_MODEL` nếu bạn cấu hình model riêng.
 
-### Lấy lời bài hát / file có nhạc nền
+### Tách vocal cho bài hát
 
-Trang Upload có chế độ `Bài hát / nhạc nền`. Khi chọn chế độ này, backend sẽ ưu tiên tách vocal bằng Demucs nếu server đã cài, sau đó chuẩn hóa audio bằng ffmpeg rồi mới gửi sang provider speech-to-text. Nếu chưa có Demucs, app tự fallback về ffmpeg filter để vẫn chạy được.
+Ở trang Tải file, chọn `Bài hát / nhạc nền` trước khi chuyển đổi. Backend dùng Demucs để tách stem vocal, chuẩn hóa lại bằng ffmpeg rồi mới gửi file vocal sang provider speech-to-text. Khi Demucs không chạy được, backend tự fallback sang bộ lọc ffmpeg để vẫn xử lý file.
 
 ```env
 AUDIO_PREPROCESSING_ENABLED=true
@@ -76,11 +76,9 @@ DEMUCS_TIMEOUT_MS=600000
 
 Cài Demucs trên server:
 
-```bash
+```powershell
 python -m pip install -U demucs
 ```
-
-Lưu ý: chế độ này giúp lấy lời bài hát tốt hơn nhiều so với gửi file nhạc gốc trực tiếp, nhưng chất lượng còn phụ thuộc vocal có rõ không, nhạc nền có lấn giọng không và model speech-to-text đang dùng.
 
 ### Dịch transcript sang ngôn ngữ khác
 

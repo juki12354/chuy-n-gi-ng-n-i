@@ -3,9 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import { BookOpen, Check, HelpCircle, X } from "lucide-react";
 import { AuthenticatedHeader } from "@/components/auth-app-header";
 import {
-  SonixPreferencesFooter,
-  SonixPreferencesSidebar,
-} from "@/components/sonix-preferences-layout";
+  VbeePreferencesFooter,
+  VbeePreferencesSidebar,
+} from "@/components/vbee-preferences-layout";
 import { useAuth } from "@/context/AuthContext";
 
 const API_URL =
@@ -126,30 +126,30 @@ function CustomDictionaryPage() {
     <div className="min-h-screen bg-background text-foreground">
       <AuthenticatedHeader />
 
-      <main className="mx-auto grid max-w-7xl gap-6 px-4 py-8 md:px-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <main className="mx-auto grid max-w-7xl gap-5 px-4 py-6 md:px-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section className="min-w-0">
-          <div className="mb-6 border-b-4 border-primary pb-5">
-            <h1 className="text-3xl font-light tracking-tight md:text-5xl">
-              Custom dictionary
+          <div className="mb-5 border-b-2 border-[#ffcb05] pb-4">
+            <h1 className="text-2xl font-light tracking-tight md:text-3xl">
+              Từ điển riêng
             </h1>
           </div>
 
           <div className="max-w-3xl">
             <p className="text-sm leading-7 text-muted-foreground">
-              Add words or phrases that commonly occur in your files and Vbee
-              will prioritize them while transcribing. Proper names, technical
-              terms, uncommon phrases, and unique spellings are all welcome.
+              Thêm các từ hoặc cụm từ thường xuất hiện trong file của bạn.
+              Vbee sẽ ưu tiên nhận diện các tên riêng, thuật ngữ chuyên ngành,
+              cụm từ hiếm và cách viết đặc biệt khi chuyển giọng nói thành văn bản.
             </p>
 
-            <div className="mt-8">
+            <div className="mt-6">
               <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <h2 className="text-lg font-black uppercase tracking-[0.08em]">
-                    Main custom dictionary
+                    Từ điển chính
                   </h2>
                   <p className="mt-1 text-sm font-semibold text-muted-foreground">
-                    One word or phrase per line. Applies to all languages. Limit
-                    400 entries.
+                    Mỗi dòng một từ hoặc cụm từ. Áp dụng cho mọi ngôn ngữ.
+                    Tối đa 400 mục.
                   </p>
                 </div>
                 <span
@@ -161,9 +161,9 @@ function CustomDictionaryPage() {
                 </span>
               </div>
 
-              <div className="overflow-hidden rounded-t-xl border border-border bg-card/70">
-                <div className="grid min-h-[360px] grid-cols-[48px_1fr]">
-                  <div className="select-none border-r border-border bg-background/45 px-3 py-4 text-right font-mono text-xs leading-6 text-muted-foreground/70">
+              <div className="overflow-hidden rounded-t-lg border border-border bg-white">
+                <div className="grid min-h-[300px] grid-cols-[48px_1fr]">
+                  <div className="select-none border-r border-border bg-[#fbf8ef] px-3 py-4 text-right font-mono text-xs leading-6 text-muted-foreground/70">
                     {Array.from({ length: lineCount }, (_, index) => (
                       <div key={index}>{index + 1}</div>
                     ))}
@@ -171,22 +171,22 @@ function CustomDictionaryPage() {
                   <textarea
                     value={dictionary}
                     onChange={(event) => setDictionary(event.target.value)}
-                    placeholder="One word/phrase per line, please!"
-                    className="min-h-[360px] w-full resize-y bg-transparent px-4 py-4 font-mono text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/50"
+                    placeholder="Mỗi dòng một từ hoặc cụm từ"
+                    className="min-h-[300px] w-full resize-y bg-transparent px-4 py-4 font-mono text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground/50"
                     spellCheck={false}
                   />
                 </div>
               </div>
 
-              <div className="rounded-b-xl border-x border-b border-border bg-primary/10 px-5 py-4">
+              <div className="rounded-b-lg border-x border-b border-border bg-[#fbf8ef] px-4 py-3">
                 <div className="flex gap-3 text-sm leading-6">
                   <HelpCircle className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
                   <p className="text-muted-foreground">
                     <span className="font-black text-foreground">
-                      Quickly add new words to Main Custom Dictionary:
+                      Thêm từ mới vào từ điển nhanh hơn:
                     </span>{" "}
-                    while editing a transcript, highlight a word or phrase and
-                    save it here for later jobs.
+                    khi biên tập transcript, hãy lưu các từ quan trọng vào đây
+                    để Vbee ưu tiên nhận diện trong các lần xử lý sau.
                   </p>
                 </div>
               </div>
@@ -214,7 +214,7 @@ function CustomDictionaryPage() {
                   className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-55"
                 >
                   <Check className="h-4 w-4" />
-                  {saving ? "SAVING..." : "SAVE MAIN CUSTOM DICTIONARY"}
+                  {saving ? "ĐANG LƯU..." : "LƯU TỪ ĐIỂN RIÊNG"}
                 </button>
                 <button
                   onClick={() => {
@@ -222,23 +222,20 @@ function CustomDictionaryPage() {
                     setMessage("");
                     setError("");
                   }}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-card/70 px-5 py-3 text-sm font-black text-muted-foreground transition hover:border-primary/50 hover:text-primary"
+                  className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-white px-5 py-3 text-sm font-black text-muted-foreground transition hover:border-primary/50 hover:text-primary"
                 >
                   <X className="h-4 w-4" />
-                  CANCEL
+                  HỦY
                 </button>
               </div>
             </div>
           </div>
         </section>
 
-        <SonixPreferencesSidebar
-          active="dictionary"
-          firstName={user.firstName}
-        />
+        <VbeePreferencesSidebar firstName={user.firstName} />
       </main>
 
-      <SonixPreferencesFooter />
+      <VbeePreferencesFooter />
     </div>
   );
 }

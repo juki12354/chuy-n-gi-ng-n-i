@@ -225,21 +225,24 @@ function SupportChat() {
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">
-          Page not found
+    <div className="flex min-h-screen items-center justify-center bg-[#f4efe4] px-4 text-[#21104a]">
+      <div className="w-full max-w-md rounded-xl border border-[#e8decc] bg-white p-8 text-center shadow-soft">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8a7100]">
+          Vbee AIVoice
+        </p>
+        <h1 className="mt-3 text-4xl font-black text-[#21104a]">404</h1>
+        <h2 className="mt-3 text-xl font-black text-[#21104a]">
+          Không tìm thấy trang này
         </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+        <p className="mt-2 text-sm leading-6 text-[#756894]">
+          Đường dẫn có thể đã thay đổi hoặc không còn khả dụng.
         </p>
         <div className="mt-6">
           <Link
             to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex items-center justify-center rounded-full bg-[#ffcb05] px-5 py-2.5 text-sm font-black text-[#21104a] transition hover:bg-[#ffdc45]"
           >
-            Go home
+            Về trang chủ
           </Link>
         </div>
       </div>
@@ -255,14 +258,17 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
+    <div className="flex min-h-screen items-center justify-center bg-[#f4efe4] px-4 text-[#21104a]">
+      <div className="w-full max-w-md rounded-xl border border-[#e8decc] bg-white p-8 text-center shadow-soft">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8a7100]">
+          Vbee AIVoice
+        </p>
+        <h1 className="mt-3 text-xl font-black tracking-tight text-[#21104a]">
+          Không thể tải trang
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back
-          home.
+        <p className="mt-2 text-sm leading-6 text-[#756894]">
+          Có lỗi tạm thời khi tải dữ liệu. Vui lòng thử lại hoặc quay về trang
+          chủ.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
@@ -270,15 +276,15 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
               router.invalidate();
               reset();
             }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex items-center justify-center rounded-full bg-[#ffcb05] px-4 py-2 text-sm font-black text-[#21104a] transition hover:bg-[#ffdc45]"
           >
-            Try again
+            Thử lại
           </button>
           <a
             href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            className="inline-flex items-center justify-center rounded-full border border-[#e8decc] bg-white px-4 py-2 text-sm font-black text-[#21104a] transition hover:bg-[#fbf8ef]"
           >
-            Go home
+            Về trang chủ
           </a>
         </div>
       </div>
@@ -349,7 +355,6 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
         <VbeeSupportWidget />
       </AuthProvider>

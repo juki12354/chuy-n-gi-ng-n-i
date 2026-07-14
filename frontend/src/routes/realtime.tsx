@@ -330,14 +330,14 @@ function RealtimePage() {
     <div className="min-h-screen bg-background text-foreground">
       <AuthenticatedHeader />
 
-      <main className="mx-auto max-w-6xl px-4 py-10 md:px-6">
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <main className="mx-auto max-w-6xl px-4 py-6 md:px-6">
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-black uppercase tracking-wide text-primary">
               <Radio className="h-3.5 w-3.5" />
               V2 realtime
             </div>
-            <h1 className="text-4xl font-black tracking-tight md:text-5xl">
+            <h1 className="text-2xl font-black tracking-tight md:text-3xl">
               Nói realtime
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -347,23 +347,23 @@ function RealtimePage() {
           </div>
           <Link
             to="/history"
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-card/70 px-5 py-3 text-sm font-black transition hover:border-primary/50 hover:text-primary"
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-white px-4 py-2.5 text-sm font-black transition hover:border-primary/50 hover:text-primary"
           >
             <History className="h-4 w-4" />
             Mở lịch sử
           </Link>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <section className="rounded-2xl border border-border bg-card/80 p-5 shadow-soft">
-            <div className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <section className="rounded-lg border border-border bg-white p-4 shadow-soft">
+            <div className="flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.14em] text-muted-foreground">
                   Phiên realtime
                 </p>
                 <div className="mt-2 flex items-center gap-3">
                   <span
-                    className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                    className={`flex h-11 w-11 items-center justify-center rounded-full ${
                       listening
                         ? "bg-primary text-primary-foreground shadow-glow"
                         : "bg-primary/10 text-primary"
@@ -372,7 +372,7 @@ function RealtimePage() {
                     <Mic className="h-6 w-6" />
                   </span>
                   <div>
-                    <p className="text-2xl font-black">{formatClock(elapsed)}</p>
+                    <p className="text-xl font-black">{formatClock(elapsed)}</p>
                     <p className="text-sm font-semibold text-muted-foreground">
                       {listening ? "Đang nghe..." : "Sẵn sàng nghe"}
                     </p>
@@ -384,7 +384,7 @@ function RealtimePage() {
                 {listening ? (
                   <button
                     onClick={stopListening}
-                    className="inline-flex items-center gap-2 rounded-full border border-destructive/40 bg-destructive/10 px-5 py-3 text-sm font-black text-destructive transition hover:bg-destructive/20"
+                    className="inline-flex items-center gap-2 rounded-full border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm font-black text-destructive transition hover:bg-destructive/20"
                   >
                     <Pause className="h-4 w-4" />
                     Dừng nghe
@@ -392,7 +392,7 @@ function RealtimePage() {
                 ) : (
                   <button
                     onClick={startListening}
-                    className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
+                    className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
                   >
                     <Mic className="h-4 w-4" />
                     Bắt đầu nói
@@ -400,7 +400,7 @@ function RealtimePage() {
                 )}
                 <button
                   onClick={reset}
-                  className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-3 text-sm font-black transition hover:bg-card"
+                  className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-black transition hover:bg-[#fbf8ef]"
                 >
                   <RotateCcw className="h-4 w-4" />
                   Làm lại
@@ -415,16 +415,16 @@ function RealtimePage() {
               </div>
             )}
 
-            <div className="mt-5 min-h-[330px] rounded-2xl border border-border bg-background/45 p-5">
+            <div className="mt-4 min-h-[260px] rounded-lg border border-border bg-[#fbf8ef] p-4">
               {liveText ? (
-                <p className="whitespace-pre-wrap text-lg leading-9">
+                <p className="whitespace-pre-wrap text-base leading-8">
                   {transcript}
                   {interim && (
                     <span className="text-muted-foreground"> {interim}</span>
                   )}
                 </p>
               ) : (
-                <div className="flex min-h-[290px] flex-col items-center justify-center text-center">
+                <div className="flex min-h-[220px] flex-col items-center justify-center text-center">
                   <Sparkles className="h-12 w-12 text-primary/60" />
                   <h2 className="mt-4 text-xl font-black">
                     Bấm “Bắt đầu nói” để tạo transcript realtime
@@ -438,7 +438,7 @@ function RealtimePage() {
             </div>
 
             {translation?.text && (
-              <div className="mt-5 rounded-2xl border border-primary/30 bg-primary/10 p-5">
+              <div className="mt-4 rounded-lg border border-primary/25 bg-primary/5 p-4">
                 <p className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-primary">
                   Bản dịch {languageLabel(translation.targetLanguage)}
                 </p>
@@ -466,11 +466,11 @@ function RealtimePage() {
               </div>
             )}
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <button
                 onClick={() => void copyTranscript()}
                 disabled={!liveText}
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-border px-5 py-3 text-sm font-black transition hover:border-primary/50 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm font-black transition hover:border-primary/50 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 {copied ? "Đã copy" : "Copy"}
@@ -478,7 +478,7 @@ function RealtimePage() {
               <button
                 onClick={downloadTxt}
                 disabled={!transcript.trim()}
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-5 py-3 text-sm font-black text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-black text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Download className="h-4 w-4" />
                 Tải .txt
@@ -486,7 +486,7 @@ function RealtimePage() {
               <button
                 onClick={() => void saveTranscript()}
                 disabled={!transcript.trim() || saving || listening}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? (
                   <span className="h-4 w-4 rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground animate-spin" />
@@ -498,13 +498,13 @@ function RealtimePage() {
             </div>
           </section>
 
-          <aside className="space-y-5">
+          <aside className="space-y-4">
             <QuotaStatusPanel
               refreshKey={quotaRefreshKey}
               onQuotaChange={setQuota}
             />
 
-            <div className="rounded-2xl border border-border bg-card/80 p-5 shadow-soft">
+            <div className="rounded-lg border border-border bg-white p-4 shadow-soft">
               <h2 className="flex items-center gap-2 text-lg font-black">
                 <Languages className="h-5 w-5 text-primary" />
                 Cấu hình realtime
@@ -516,7 +516,7 @@ function RealtimePage() {
                     value={language}
                     onChange={(e) => setLanguage(e.target.value)}
                     disabled={listening}
-                    className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:border-primary"
+                    className="mt-2 w-full rounded-md border border-border bg-[#fbf8ef] px-3 py-2.5 text-sm outline-none focus:border-primary"
                   >
                     {SPEECH_LANGUAGE_OPTIONS.map((item) => (
                       <option key={item.value} value={item.value}>
@@ -531,7 +531,7 @@ function RealtimePage() {
                   <select
                     value={translateTo}
                     onChange={(e) => setTranslateTo(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:border-primary"
+                    className="mt-2 w-full rounded-md border border-border bg-[#fbf8ef] px-3 py-2.5 text-sm outline-none focus:border-primary"
                   >
                     {TRANSLATION_LANGUAGE_OPTIONS.map((item) => (
                       <option key={item.value} value={item.value}>
@@ -543,7 +543,7 @@ function RealtimePage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border bg-card/80 p-5 shadow-soft">
+            <div className="rounded-lg border border-border bg-white p-4 shadow-soft">
               <p className="text-xs font-black uppercase tracking-[0.14em] text-primary">
                 Giới hạn phiên
               </p>

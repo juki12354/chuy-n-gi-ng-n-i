@@ -30,7 +30,8 @@ import {
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import { useAuth } from "@/context/AuthContext";
 import { AuthenticatedHeader } from "@/components/auth-app-header";
-import { QuotaStatusPanel } from "@/components/quota-status-panel";
+import { VbeeAccountUsageCard } from "@/components/vbee-preferences-layout";
+import vbeeLogo from "@/assets/vbee-logo.png";
 import { formatQuotaTime, type QuotaStatus } from "@/lib/quota";
 import {
   SPEECH_LANGUAGE_OPTIONS,
@@ -636,45 +637,43 @@ function RecordPage() {
     <div className="min-h-screen bg-background text-foreground">
       <AuthenticatedHeader />
 
-      <main className="mx-auto max-w-5xl px-4 py-12 md:px-6 md:py-16">
-        <section className="mx-auto max-w-2xl">
-          <RecorderPanel status={status} recordTime={recordTime} />
+      <main className="mx-auto max-w-[1500px] px-4 py-6 md:px-6 md:py-8">
+        <section className="mx-auto">
+          <div className="grid gap-5 xl:grid-cols-[minmax(280px,0.9fr)_minmax(540px,1.6fr)_minmax(300px,0.95fr)] xl:items-center">
+            <aside className="order-2 min-w-0 xl:order-1 xl:max-w-[330px] xl:justify-self-start">
+              <RecorderReadinessPanel
+                micStatus={micStatus}
+                micStatusMessage={micStatusMessage}
+                micDeviceLabel={micDeviceLabel}
+                audioLevel={audioLevel}
+                audioWarning={audioWarning}
+                recordTime={recordTime}
+                status={status}
+                quota={quota}
+                onCheckMicrophone={() => void checkMicrophoneStatus()}
+              />
+            </aside>
 
-          <div className="mt-5">
-            <QuotaStatusPanel
-              compact
-              refreshKey={quotaRefreshKey}
-              onQuotaChange={setQuota}
-            />
-            <RecorderReadinessPanel
-              micStatus={micStatus}
-              micStatusMessage={micStatusMessage}
-              micDeviceLabel={micDeviceLabel}
-              audioLevel={audioLevel}
-              audioWarning={audioWarning}
-              recordTime={recordTime}
-              status={status}
-              quota={quota}
-              onCheckMicrophone={() => void checkMicrophoneStatus()}
-            />
-            {quota && (
-              <p className="mt-3 text-center text-xs font-semibold text-muted-foreground">
-                Ghi âm tối đa:{" "}
-                {formatQuotaTime(
-                  Math.min(
-                    quota.remainingSeconds,
-                    quota.limits.maxRecordSeconds,
-                  ),
-                )}{" "}
-                cho phiên hiện tại.
-              </p>
-            )}
-            {recordingNotice && (
-              <p className="mt-3 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-center text-sm font-bold text-primary">
-                {recordingNotice}
-              </p>
-            )}
+            <div className="order-1 min-w-0 xl:order-2">
+              <RecorderPanel status={status} recordTime={recordTime} />
+            </div>
+
+            <aside className="order-3 min-w-0 xl:order-3 xl:max-w-[360px] xl:justify-self-end">
+              <VbeeAccountUsageCard
+                firstName={user.firstName}
+                compact
+                showAlert={false}
+                refreshKey={quotaRefreshKey}
+                onQuotaChange={setQuota}
+              />
+            </aside>
           </div>
+
+          {recordingNotice && (
+            <p className="mt-4 rounded-lg border border-primary/25 bg-primary/5 px-4 py-2.5 text-center text-sm font-bold text-primary">
+              {recordingNotice}
+            </p>
+          )}
 
           <div className="mt-8 flex flex-col items-center gap-4 text-center">
             {status === "idle" && (
@@ -687,7 +686,7 @@ function RecordPage() {
                       micStatus === "blocked" ||
                       micStatus === "unsupported"
                     }
-                    className="inline-flex items-center gap-3 rounded-full bg-primary px-8 py-4 text-lg font-black text-primary-foreground shadow-glow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-3 rounded-full bg-primary px-6 py-3 text-base font-black text-primary-foreground shadow-glow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Mic className="h-6 w-6" />
                     {quota?.isLimitReached
@@ -697,7 +696,7 @@ function RecordPage() {
                         : "Start Recording"}
                   </button>
                 </div>
-                <p className="max-w-xl text-lg leading-8 text-muted-foreground">
+                <p className="max-w-xl text-base leading-7 text-muted-foreground">
                   {quota?.isLimitReached
                     ? "Free đã hết thời lượng. Nâng cấp Premium để ghi âm tiếp."
                     : "Microphone access is ready - you're ready to record."}
@@ -715,14 +714,14 @@ function RecordPage() {
               <div className="grid w-full gap-3 sm:grid-cols-2">
                 <button
                   onClick={pauseRecording}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-card px-6 py-4 text-sm font-black transition hover:bg-primary/10 hover:text-primary"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-white px-5 py-3 text-sm font-black transition hover:bg-primary/5 hover:text-primary"
                 >
                   <Pause className="h-5 w-5" />
                   Tạm dừng
                 </button>
                 <button
                   onClick={stopRecording}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-destructive/40 bg-destructive/10 px-6 py-4 text-sm font-black text-destructive transition hover:bg-destructive/20"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-destructive/40 bg-destructive/10 px-5 py-3 text-sm font-black text-destructive transition hover:bg-destructive/20"
                 >
                   <Square className="h-5 w-5 fill-current" />
                   Dừng ghi âm
@@ -734,14 +733,14 @@ function RecordPage() {
               <div className="grid w-full gap-3 sm:grid-cols-2">
                 <button
                   onClick={resumeRecording}
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-4 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
                 >
                   <Play className="h-5 w-5 fill-current" />
                   Tiếp tục
                 </button>
                 <button
                   onClick={stopRecording}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-destructive/40 bg-destructive/10 px-6 py-4 text-sm font-black text-destructive transition hover:bg-destructive/20"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-destructive/40 bg-destructive/10 px-5 py-3 text-sm font-black text-destructive transition hover:bg-destructive/20"
                 >
                   <Square className="h-5 w-5 fill-current" />
                   Dừng ghi âm
@@ -765,7 +764,7 @@ function RecordPage() {
             )}
 
             {status === "processing" && (
-              <div className="rounded-2xl border border-primary/25 bg-card p-6 text-center shadow-soft">
+              <div className="rounded-lg border border-border bg-white p-5 text-center shadow-soft">
                 <span className="mx-auto block h-10 w-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
                 <p className="mt-3 font-bold text-primary">
                   Đang chuyển giọng nói thành văn bản...
@@ -777,7 +776,7 @@ function RecordPage() {
             )}
 
             {status === "error" && (
-              <div className="w-full rounded-2xl border border-destructive/25 bg-destructive/10 p-5 text-left">
+              <div className="w-full rounded-lg border border-destructive/25 bg-destructive/10 p-4 text-left">
                 <div className="mb-3 flex items-start gap-3 text-destructive">
                   <X className="mt-0.5 h-5 w-5 shrink-0" />
                   <p className="text-sm font-semibold">{error}</p>
@@ -796,7 +795,7 @@ function RecordPage() {
                       className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
                     >
                       <Zap className="h-4 w-4" />
-                      Transcribe lại
+                      Chuyển đổi lại
                     </button>
                     <button
                       onClick={() => setStatus("recorded")}
@@ -835,7 +834,7 @@ function RecordPage() {
         </section>
       </main>
 
-      <SonixStyleFooter />
+      <VbeeStyleFooter />
     </div>
   );
 }
@@ -851,29 +850,37 @@ function RecorderPanel({
   const recorded = status === "recorded" || status === "done";
 
   return (
-    <div className="overflow-hidden rounded-none border border-border bg-card shadow-soft sm:rounded-2xl">
-      <div className="flex items-center justify-center gap-3 bg-primary px-5 py-4 text-2xl font-black uppercase tracking-wide text-primary-foreground">
-        <Mic className="h-7 w-7" />
+    <div className="overflow-hidden rounded-lg border border-border bg-white shadow-soft">
+      <div className="flex items-center justify-center gap-3 bg-primary px-5 py-3 text-xl font-black uppercase tracking-wide text-primary-foreground">
+        <Mic className="h-5 w-5" />
         Record
       </div>
-      <div className="relative flex min-h-[460px] flex-col items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_center,rgba(255,203,5,0.16),transparent_34%),linear-gradient(180deg,#2b155f_0%,#17092f_100%)] px-6">
+      <div className="relative flex min-h-[340px] flex-col items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_center,rgba(255,203,5,0.18),transparent_34%),linear-gradient(180deg,#21104a_0%,#17092f_100%)] px-6">
         <div
-          className={`flex h-52 w-52 items-center justify-center rounded-full border-8 ${
+          className={`flex h-36 w-36 items-center justify-center rounded-full border-[6px] ${
             status === "error" ? "border-destructive" : "border-primary"
-          } shadow-[0_0_55px_rgba(255,203,5,.48)] transition ${
+          } shadow-[0_0_36px_rgba(255,203,5,.36)] transition ${
             active ? "scale-105 animate-pulse" : ""
           }`}
         >
-          {recorded && <Check className="h-20 w-20 text-primary" />}
-          {status === "error" && <X className="h-20 w-20 text-destructive" />}
+          {!recorded && status !== "error" && (
+            <div className="grid h-28 w-28 place-items-center rounded-full bg-[#fffdf4] p-4 shadow-inner">
+              <img
+                src={vbeeLogo}
+                alt="Vbee"
+                className="h-auto w-full object-contain"
+              />
+            </div>
+          )}
+          {recorded && <Check className="h-14 w-14 text-primary" />}
+          {status === "error" && <X className="h-14 w-14 text-destructive" />}
         </div>
-
-        <p className="mt-24 text-center text-lg font-black uppercase tracking-wide text-muted-foreground">
+        <p className="mt-14 text-center text-sm font-black uppercase tracking-wide text-white/70">
           {getRecorderLabel(status)}
         </p>
 
-        <div className="absolute inset-x-0 bottom-0 flex h-16 items-center justify-end border-t border-white/20 bg-black/45 px-8">
-          <span className="font-mono text-2xl font-black tracking-widest text-white">
+        <div className="absolute inset-x-0 bottom-0 flex h-12 items-center justify-end border-t border-white/12 bg-black/35 px-6">
+          <span className="font-mono text-xl font-black tracking-widest text-white">
             {formatTime(recordTime)}
           </span>
         </div>
@@ -921,14 +928,14 @@ function RecorderReadinessPanel({
         : "text-muted-foreground";
 
   return (
-    <div className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-soft">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex gap-3 text-left">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
-            <Mic className="h-5 w-5" />
+    <div className="rounded-lg border border-border bg-white p-2.5 shadow-soft">
+      <div className="flex flex-col gap-2.5 md:flex-row md:items-center md:justify-between">
+        <div className="flex gap-2 text-left">
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/5 text-primary">
+            <Mic className="h-3.5 w-3.5" />
           </div>
           <div>
-            <p className={`text-sm font-black uppercase tracking-wide ${statusColor}`}>
+            <p className={`text-xs font-black uppercase tracking-wide ${statusColor}`}>
               {micStatus === "checking"
                 ? "Đang kiểm tra mic"
                 : micStatus === "ready"
@@ -939,11 +946,11 @@ function RecorderReadinessPanel({
                       ? "Microphone bị chặn"
                       : "Trình duyệt chưa hỗ trợ"}
             </p>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
               {micStatusMessage}
             </p>
             {micDeviceLabel && (
-              <p className="mt-1 text-xs font-semibold text-muted-foreground/80">
+              <p className="mt-1 text-[11px] font-semibold text-muted-foreground/80">
                 Thiết bị: {micDeviceLabel}
               </p>
             )}
@@ -951,19 +958,19 @@ function RecorderReadinessPanel({
         </div>
         <button
           onClick={onCheckMicrophone}
-          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-border px-4 py-2 text-xs font-black transition hover:border-primary/50 hover:text-primary"
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-border px-3 py-1.5 text-[11px] font-black transition hover:border-primary/50 hover:text-primary"
         >
-          <RotateCcw className="h-3.5 w-3.5" />
+          <RotateCcw className="h-3 w-3" />
           Kiểm tra mic
         </button>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <div className="rounded-xl border border-border bg-background/35 p-3">
-          <p className="text-xs font-black uppercase text-muted-foreground">
+      <div className="mt-2.5 grid gap-1.5 md:grid-cols-3">
+        <div className="rounded-lg border border-border bg-[#fbf8ef] p-2">
+          <p className="text-[11px] font-black uppercase text-muted-foreground">
             Âm lượng realtime
           </p>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
             <div
               className={`h-full rounded-full ${
                 audioWarning && isLive ? "bg-destructive" : "bg-primary"
@@ -971,41 +978,41 @@ function RecorderReadinessPanel({
               style={{ width: `${isLive ? Math.max(audioLevel, 2) : 0}%` }}
             />
           </div>
-          <p className="mt-2 text-xs font-semibold text-muted-foreground">
+          <p className="mt-1 text-[11px] font-semibold leading-4 text-muted-foreground">
             {isLive
               ? audioWarning || "Mic đang thu âm ổn định."
               : "Bắt đầu ghi để xem mức âm."}
           </p>
         </div>
 
-        <div className="rounded-xl border border-border bg-background/35 p-3">
-          <p className="text-xs font-black uppercase text-muted-foreground">
+        <div className="rounded-lg border border-border bg-[#fbf8ef] p-2">
+          <p className="text-[11px] font-black uppercase text-muted-foreground">
             Giới hạn phiên
           </p>
-          <p className="mt-2 text-lg font-black text-foreground">
+          <p className="mt-1 text-base font-black text-foreground">
             {sessionLimit ? formatQuotaTime(sessionLimit) : "Đang tải"}
           </p>
-          <p className="mt-1 text-xs font-semibold text-muted-foreground">
+          <p className="mt-1 text-[11px] font-semibold leading-4 text-muted-foreground">
             Theo quota và giới hạn gói hiện tại.
           </p>
         </div>
 
         <div
-          className={`rounded-xl border p-3 ${
+          className={`rounded-lg border p-2.5 ${
             nearLimit
               ? "border-destructive/30 bg-destructive/10"
-              : "border-border bg-background/35"
+              : "border-border bg-[#fbf8ef]"
           }`}
         >
-          <p className="text-xs font-black uppercase text-muted-foreground">
+          <p className="text-[11px] font-black uppercase text-muted-foreground">
             Còn lại sau phiên
           </p>
-          <p className="mt-2 text-lg font-black text-foreground">
+          <p className="mt-1 text-base font-black text-foreground">
             {remainingAfterRecord !== null
               ? formatQuotaTime(remainingAfterRecord)
               : "Đăng nhập"}
           </p>
-          <p className="mt-1 text-xs font-semibold text-muted-foreground">
+          <p className="mt-1 text-[11px] font-semibold leading-4 text-muted-foreground">
             {nearLimit
               ? "Sắp hết quota, Vbee có thể tự dừng ghi âm."
               : "Quota được trừ theo số giây ghi âm."}
@@ -1040,9 +1047,9 @@ function RecordedActions({
   reset: () => void;
 }) {
   return (
-    <div className="w-full space-y-4 rounded-2xl border border-border bg-card p-5 shadow-soft">
+    <div className="w-full space-y-4 rounded-lg border border-border bg-white p-4 shadow-soft">
       {audioUrl && (
-        <div className="rounded-xl border border-border bg-background/45 p-4">
+        <div className="rounded-lg border border-border bg-[#fbf8ef] p-4">
           <p className="mb-3 text-xs font-semibold text-muted-foreground">
             Nghe lại bản ghi âm
           </p>
@@ -1050,7 +1057,7 @@ function RecordedActions({
         </div>
       )}
 
-      <label className="flex items-center justify-between rounded-xl border border-border bg-background/45 px-4 py-3 text-left">
+      <label className="flex items-center justify-between rounded-lg border border-border bg-[#fbf8ef] px-4 py-3 text-left">
         <div>
           <p className="text-sm font-bold">Gắn nhãn người nói</p>
           <p className="text-xs text-muted-foreground">
@@ -1077,7 +1084,7 @@ function RecordedActions({
       </label>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="rounded-xl border border-border bg-background/45 px-4 py-3 text-left">
+        <label className="rounded-lg border border-border bg-[#fbf8ef] px-4 py-3 text-left">
           <span className="text-sm font-bold">Ngôn ngữ âm thanh</span>
           <select
             value={transcriptionLanguage}
@@ -1091,7 +1098,7 @@ function RecordedActions({
             ))}
           </select>
         </label>
-        <label className="rounded-xl border border-border bg-background/45 px-4 py-3 text-left">
+        <label className="rounded-lg border border-border bg-[#fbf8ef] px-4 py-3 text-left">
           <span className="text-sm font-bold">Dịch văn bản sang</span>
           <select
             value={translateTo}
@@ -1172,7 +1179,7 @@ function TranscriptResult({
   reset: () => void;
 }) {
   return (
-    <div className="mt-8 rounded-2xl border border-border bg-card p-5 shadow-soft">
+    <div className="mt-6 rounded-lg border border-border bg-white p-4 shadow-soft">
       <div className="mb-4 flex flex-col gap-2 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-sm">
           <Check className="h-4 w-4 text-primary" />
@@ -1196,7 +1203,7 @@ function TranscriptResult({
       </div>
 
       {audioUrl && (
-        <div className="mb-4 rounded-xl border border-border bg-background/45 p-4">
+        <div className="mb-4 rounded-lg border border-border bg-[#fbf8ef] p-4">
           <p className="mb-3 text-xs font-semibold text-muted-foreground">
             Nghe lại - từ đang phát sẽ được highlight, nhấn vào từ để tua
           </p>
@@ -1211,7 +1218,7 @@ function TranscriptResult({
       )}
 
       {words.length > 0 ? (
-        <div className="rounded-xl border border-border bg-background/45 px-5 py-4">
+        <div className="rounded-lg border border-border bg-[#fbf8ef] px-4 py-3">
           <p className="mb-2 text-xs font-semibold text-muted-foreground">
             Văn bản - có thể chỉnh sửa trực tiếp
           </p>
@@ -1231,12 +1238,12 @@ function TranscriptResult({
           value={transcription}
           rows={8}
           onChange={(e) => setTranscription(e.target.value)}
-          className="w-full resize-y rounded-xl border border-border bg-background/45 px-5 py-4 text-sm leading-relaxed text-foreground outline-none focus:ring-2 focus:ring-primary/40"
+          className="w-full resize-y rounded-lg border border-border bg-[#fbf8ef] px-4 py-3 text-sm leading-relaxed text-foreground outline-none focus:ring-2 focus:ring-primary/40"
         />
       )}
 
       {translation?.text && (
-        <div className="mt-4 rounded-xl border border-primary/30 bg-primary/10 px-5 py-4">
+        <div className="mt-4 rounded-lg border border-primary/25 bg-primary/5 px-4 py-3">
           <p className="mb-2 text-xs font-black uppercase tracking-[0.14em] text-primary">
             Bản dịch {languageLabel(translation.targetLanguage)}
           </p>
@@ -1349,7 +1356,7 @@ function RecordingHelpWidget({
   }
 
   return (
-    <div className="fixed inset-x-3 bottom-24 z-[80] mx-auto max-h-[calc(100vh-7rem)] w-[min(420px,calc(100vw-1.5rem))] overflow-hidden rounded-[1.75rem] border border-border bg-secondary text-secondary-foreground shadow-[0_28px_90px_rgba(0,0,0,.48)] sm:left-auto sm:right-6">
+    <div className="fixed inset-x-3 bottom-24 z-[80] mx-auto max-h-[calc(100vh-7rem)] w-[min(400px,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-border bg-white text-secondary-foreground shadow-[0_18px_60px_rgba(33,16,74,.18)] sm:left-auto sm:right-6">
       {view === "home" && (
         <HelpHome firstName={firstName} setOpen={setOpen} setView={setView} />
       )}
@@ -1398,9 +1405,9 @@ function HelpHome({
             </button>
           </div>
         </div>
-        <h2 className="mt-14 text-3xl font-black leading-tight">
+        <h2 className="mt-14 text-2xl font-black leading-tight md:text-3xl">
           Hi {firstName}!<br />
-          How can we help?
+          Vbee có thể hỗ trợ gì?
         </h2>
       </div>
 
@@ -1409,10 +1416,10 @@ function HelpHome({
           onClick={() => setView("chat")}
           className="flex w-full items-center justify-between rounded-xl border border-border bg-secondary px-5 py-4 text-left shadow-soft transition hover:border-primary/50"
         >
-          <span>
-            <span className="block font-black">Send us a message</span>
+            <span>
+            <span className="block font-black">Gửi tin nhắn hỗ trợ</span>
             <span className="mt-1 block text-sm text-secondary-foreground/65">
-              We'll be back online tomorrow
+              Vbee sẽ phản hồi trong thời gian sớm nhất
             </span>
           </span>
           <ChevronRight className="h-6 w-6 text-primary" />
@@ -1423,7 +1430,7 @@ function HelpHome({
             onClick={() => setView("help")}
             className="mb-3 flex w-full items-center justify-between rounded-lg bg-background/10 px-3 py-2 text-left text-sm font-black"
           >
-            Search for help
+            Tìm kiếm trợ giúp
             <Search className="h-4 w-4 text-primary" />
           </button>
           <div className="space-y-1">
@@ -1453,18 +1460,18 @@ function HelpMessages({
 }) {
   return (
     <>
-      <HelpPanelHeader title="Messages" onClose={() => setOpen(false)} />
+      <HelpPanelHeader title="Tin nhắn" onClose={() => setOpen(false)} />
       <div className="flex min-h-[470px] flex-col items-center justify-center px-6 text-center">
         <MessageSquare className="h-9 w-9 text-secondary-foreground" />
-        <h3 className="mt-6 text-xl font-black">No messages</h3>
+        <h3 className="mt-6 text-xl font-black">Chưa có tin nhắn</h3>
         <p className="mt-3 text-sm text-secondary-foreground/70">
-          Messages from the team will be shown here
+          Tin nhắn từ đội ngũ Vbee sẽ được hiển thị tại đây
         </p>
         <button
           onClick={() => setView("chat")}
           className="mt-auto mb-5 inline-flex items-center gap-3 rounded-xl bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-glow"
         >
-          Send us a message
+          Gửi tin nhắn
           <Send className="h-4 w-4" />
         </button>
       </div>
@@ -1501,7 +1508,7 @@ function HelpChat({
           <div>
             <p className="text-sm font-black">Vbee AI</p>
             <p className="text-xs text-secondary-foreground/60">
-              Back tomorrow
+              Sẵn sàng hỗ trợ
             </p>
           </div>
         </div>
@@ -1515,13 +1522,13 @@ function HelpChat({
       </div>
       <div className="flex min-h-[560px] flex-col bg-secondary">
         <p className="px-8 pt-6 text-center text-sm text-secondary-foreground/75">
-          Nice to meet you. How can we help you today?
+          Vbee sẵn sàng hỗ trợ bạn trong quá trình ghi âm và tạo transcript.
         </p>
         <div className="mt-auto p-4">
-          <div className="rounded-2xl border-2 border-primary bg-secondary p-4">
+          <div className="rounded-lg border-2 border-primary bg-white p-4">
             <textarea
               rows={2}
-              placeholder="Message..."
+              placeholder="Nhập tin nhắn..."
               className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-secondary-foreground/55"
             />
             <div className="mt-2 flex items-center justify-between">
@@ -1545,15 +1552,15 @@ function HelpChat({
 function HelpCollections({ setOpen }: { setOpen: (open: boolean) => void }) {
   return (
     <>
-      <HelpPanelHeader title="Help" onClose={() => setOpen(false)} />
+      <HelpPanelHeader title="Trợ giúp" onClose={() => setOpen(false)} />
       <div className="px-4 py-4">
         <button className="flex w-full items-center justify-between rounded-lg bg-background/10 px-3 py-3 text-left text-sm">
-          Search for help
+          Tìm kiếm trợ giúp
           <Search className="h-4 w-4 text-primary" />
         </button>
       </div>
       <div className="max-h-[500px] overflow-y-auto border-t border-border px-5 pb-4 scrollbar-primary">
-        <h3 className="py-5 text-base font-black">25 collections</h3>
+        <h3 className="py-5 text-base font-black">Chủ đề hỗ trợ</h3>
         <div className="divide-y divide-border">
           {HELP_COLLECTIONS.map((item) => (
             <button
@@ -1612,9 +1619,9 @@ function HelpBottomNav({
     label: string;
     icon: typeof Home;
   }> = [
-    { view: "home", label: "Home", icon: Home },
-    { view: "messages", label: "Messages", icon: Inbox },
-    { view: "help", label: "Help", icon: CircleHelp },
+    { view: "home", label: "Trang chính", icon: Home },
+    { view: "messages", label: "Tin nhắn", icon: Inbox },
+    { view: "help", label: "Trợ giúp", icon: CircleHelp },
   ];
 
   return (
@@ -1640,22 +1647,18 @@ function HelpBottomNav({
   );
 }
 
-function SonixStyleFooter() {
+function VbeeStyleFooter() {
   return (
-    <footer className="mt-16 border-t border-border bg-card/70 px-4 py-8 text-center text-sm text-muted-foreground">
+    <footer className="mt-10 border-t border-border bg-white px-4 py-6 text-center text-sm text-muted-foreground">
       <p>© 2026 Vbee Voice. All rights reserved.</p>
       <div className="mt-3 flex flex-wrap justify-center gap-x-6 gap-y-2 font-semibold text-primary">
-        <Link to="/">Home</Link>
-        <Link to="/pricing">Pricing</Link>
-        <Link to="/upload">Upload</Link>
+        <Link to="/">Vbee</Link>
+        <Link to="/pricing">Bảng giá</Link>
+        <Link to="/upload">Tải file</Link>
         <Link to="/api">API</Link>
-        <Link to="/dashboard" search={{ token: undefined }}>
-          Studio
-        </Link>
       </div>
       <p className="mt-5 inline-flex items-center justify-center gap-2">
-        Made with <Heart className="h-4 w-4 text-primary" /> and{" "}
-        <FileAudio className="h-4 w-4 text-primary" /> in your AI voice studio
+        Được phát triển cho trải nghiệm ghi âm và chuyển giọng nói thành văn bản.
       </p>
     </footer>
   );

@@ -4,23 +4,22 @@ import type { ComponentType, ReactNode } from "react";
 import {
   ArrowRight,
   AudioLines,
-  BookOpen,
   Check,
   Clock,
   Copy,
   Download,
   FileAudio,
+  FileVideo,
   Folder,
   FolderPlus,
-  Gift,
   HardDrive,
   Heart,
-  Home,
+  Info,
   Languages,
-  MessageCircle,
+  Link2,
+  ListChecks,
   Mic,
   RotateCcw,
-  Settings,
   SlidersHorizontal,
   Upload,
   UploadCloud,
@@ -36,8 +35,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { QuotaStatusPanel } from "@/components/quota-status-panel";
-import { PhilosophyQuoteCard } from "@/components/philosophy-quote-card";
+import { VbeePreferencesSidebar } from "@/components/vbee-preferences-layout";
 import { formatQuotaTime, type QuotaStatus } from "@/lib/quota";
 import {
   SPEECH_LANGUAGE_OPTIONS,
@@ -51,7 +49,10 @@ const API_URL =
   "http://localhost:3001";
 const MAX_MB = 200;
 
-const FORMAT_TAGS = ["MP3", "WAV", "M4A", "OGG", "FLAC", "AAC"];
+const FORMAT_TAGS = ["MP3", "WAV", "M4A", "OGG", "FLAC", "AAC", "MP4", "WEBM"];
+const UPLOAD_LANGUAGE_OPTIONS = SPEECH_LANGUAGE_OPTIONS.filter(
+  (item) => item.value !== "auto" && item.value !== "multi",
+);
 
 interface Word {
   text: string;
@@ -154,13 +155,12 @@ function UploadPage() {
   const [copied, setCopied] = useState(false);
   const [speakerLabels, setSpeakerLabels] = useState(false);
   const [audioMode, setAudioMode] = useState<AudioMode>("speech");
-  const [transcriptionLanguage, setTranscriptionLanguage] = useState("auto");
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState("vi");
   const [translateTo, setTranslateTo] = useState("none");
   const [translation, setTranslation] = useState<TranslationResult | null>(
     null,
   );
   const [translationError, setTranslationError] = useState("");
-  const [audioProcessingNote, setAudioProcessingNote] = useState("");
   const [words, setWords] = useState<Word[]>([]);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -168,7 +168,7 @@ function UploadPage() {
   const [videoLink, setVideoLink] = useState("");
   const [folderOpen, setFolderOpen] = useState(false);
   const [folderName, setFolderName] = useState("Dự án mới");
-  const [activeFolder, setActiveFolder] = useState("jjhhu");
+  const [activeFolder, setActiveFolder] = useState("Dự án mới");
   const [actionDialog, setActionDialog] = useState<ActionDialogState | null>(
     null,
   );
@@ -291,7 +291,7 @@ function UploadPage() {
       return;
     }
     if (quota?.isLimitReached) {
-      setUploadError("Free đã hết thời lượng. Vui lòng nâng cấp Premium.");
+      setUploadError("Gói miễn phí đã hết thời lượng. Vui lòng nâng cấp gói cước.");
       return;
     }
     const duration = await readMediaDuration(file);
@@ -316,7 +316,6 @@ function UploadPage() {
     setTranscription("");
     setTranslation(null);
     setTranslationError("");
-    setAudioProcessingNote("");
     setDuration(null);
     setWords([]);
   }
@@ -362,9 +361,6 @@ function UploadPage() {
         quota?: QuotaStatus;
         translation?: TranslationResult | null;
         translationError?: string;
-        preprocessingApplied?: boolean;
-        preprocessingMethod?: "demucs" | "ffmpeg" | string | null;
-        preprocessingWarning?: string | null;
       };
       if (!res.ok) {
         if (data.quota) setQuota(data.quota);
@@ -375,19 +371,6 @@ function UploadPage() {
       setTranscription(data.text ?? "");
       setTranslation(data.translation ?? null);
       setTranslationError(data.translationError ?? "");
-      setAudioProcessingNote(
-        data.preprocessingWarning
-          ? data.preprocessingApplied
-            ? `Chế độ bài hát: ${data.preprocessingWarning} Đã dùng ${
-                data.preprocessingMethod === "demucs" ? "Demucs" : "ffmpeg"
-              } để xử lý trước khi chuyển thành văn bản.`
-            : `Chế độ bài hát: ${data.preprocessingWarning}`
-          : data.preprocessingApplied
-            ? data.preprocessingMethod === "demucs"
-              ? "Đã tách vocal bằng Demucs rồi mới chuyển thành văn bản."
-              : "Đã làm rõ vocal/giọng hát bằng ffmpeg trước khi chuyển thành văn bản."
-            : "",
-      );
       setDuration(data.duration ?? null);
       setWords(data.words ?? []);
       if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -514,71 +497,17 @@ function UploadPage() {
   function handleVideoLink() {
     if (!videoLink.trim()) {
       setActionDialog({
-        title: "Video link",
+        title: "Link video",
         description: "Hãy dán link video/audio công khai trước khi gửi.",
       });
       return;
     }
     setActionDialog({
-      title: "Video link đã nhận",
+      title: "Đã nhận link video",
       description:
-        "Giao diện đã sẵn sàng giống Sonix. Backend hiện đang xử lý file upload trực tiếp; để transcribe link công khai cần thêm endpoint tải audio từ URL ở backend.",
+        "Vbee hiện hỗ trợ xử lý file tải lên trực tiếp. Với video link công khai, hệ thống sẽ cần kết nối thêm bước lấy audio từ URL trước khi chuyển thành văn bản.",
       ctaLabel: "Chọn file thay thế",
       to: "choose-file",
-    });
-  }
-
-  function openFeature(label: string) {
-    const normalized = label.toLowerCase();
-    if (normalized.includes("transcription")) {
-      void navigate({ to: "/transcription-settings" });
-      return;
-    }
-    if (normalized.includes("dictionary")) {
-      void navigate({ to: "/custom-dictionary" });
-      return;
-    }
-    if (normalized.includes("upload")) {
-      fileInputRef.current?.click();
-      return;
-    }
-    if (
-      normalized.includes("zoom") ||
-      normalized.includes("teams") ||
-      normalized.includes("zapier")
-    ) {
-      setActionDialog({
-        title: label,
-        description:
-          "Các tích hợp này sẽ đi qua API key/webhook. Mở trang API để tạo key và test endpoint trước khi nối vào Zoom, Teams hoặc Zapier.",
-        ctaLabel: "Mở trang API",
-        to: "/api",
-      });
-      return;
-    }
-    if (normalized.includes("analysis")) {
-      setActionDialog({
-        title: label,
-        description:
-          "AI analysis sẽ áp dụng sau khi có transcript. Mở lịch sử để chọn bản ghi đã transcribe và chuẩn bị phân tích.",
-        ctaLabel: "Mở lịch sử",
-        to: "/history",
-      });
-      return;
-    }
-    if (normalized.includes("help") || normalized.includes("video")) {
-      setActionDialog({
-        title: label,
-        description:
-          "Bảng trợ giúp kiểu Sonix hiện có trong trang ghi âm. Mở trang ghi âm để xem Home, Messages và Help collections.",
-        ctaLabel: "Mở ghi âm",
-        to: "/record",
-      });
-      return;
-    }
-    setActionDialog({
-      title: label,
-      description: "Tính năng này đã có điểm bấm và sẽ được nối sâu hơn.",
     });
   }
 
@@ -606,39 +535,30 @@ function UploadPage() {
         }}
       />
 
-      <main className="mx-auto grid max-w-7xl gap-6 px-4 py-8 md:px-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <main className="mx-auto grid max-w-7xl gap-5 px-4 py-6 md:px-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section className="min-w-0">
-          <div className="mb-6">
-            <div className="mb-5 flex items-center gap-3">
-              <Heart className="h-10 w-10 text-primary" />
-              <h1 className="text-3xl font-light tracking-tight text-foreground md:text-5xl">
-                Welcome, {user.firstName}
+          <div className="mb-5">
+            <div className="mb-4 flex items-center gap-3">
+              <Heart className="h-8 w-8 text-[#ffcb05]" />
+              <h1 className="text-2xl font-light tracking-tight text-foreground md:text-3xl">
+                Chào mừng, {user.firstName}
               </h1>
             </div>
-
-            <Link
-              to="/dashboard"
-              search={{ token: undefined }}
-              className="mb-3 flex items-center justify-center rounded-md border border-border bg-card/75 px-4 py-2 text-sm font-bold text-foreground/85 shadow-soft transition hover:border-primary/50 hover:bg-primary/10 hover:text-primary"
-            >
-              <Home className="mr-2 h-4 w-4 text-primary" />
-              Home
-            </Link>
 
             <div className="grid grid-cols-[1fr_1fr_44px] gap-2 sm:flex">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
               >
                 <Upload className="h-4 w-4" />
-                UPLOAD
+                TẢI FILE
               </button>
               <button
                 onClick={() => setFolderOpen(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-card/70 px-5 py-3 text-sm font-black text-foreground transition hover:border-primary/50 hover:text-primary"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-border bg-white px-4 py-2.5 text-sm font-black text-foreground transition hover:border-primary/50 hover:text-primary"
               >
                 <FolderPlus className="h-4 w-4" />
-                NEW FOLDER
+                THƯ MỤC MỚI
               </button>
               <button
                 onClick={() => {
@@ -654,7 +574,7 @@ function UploadPage() {
                     to: "choose-file",
                   });
                 }}
-                className="inline-flex h-12 w-12 items-center justify-center rounded-md border border-border bg-card/70 text-muted-foreground transition hover:border-primary/50 hover:text-primary"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-white text-muted-foreground transition hover:border-primary/50 hover:text-primary"
                 title="Tải transcript"
               >
                 <Download className="h-4 w-4" />
@@ -666,21 +586,14 @@ function UploadPage() {
               status={uploadStatus}
             />
 
-            <div className="mt-4">
-              <QuotaStatusPanel
-                compact
-                refreshKey={quotaRefreshKey}
-                onQuotaChange={setQuota}
-              />
-            </div>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-border bg-card/70 shadow-soft">
-            <div className="border-b border-border bg-background/35 px-5 py-4">
+          <div className="overflow-hidden rounded-lg border border-border bg-white shadow-soft">
+            <div className="border-b border-border bg-[#fbf8ef] px-5 py-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">
-                    Folder Name
+                    Dự án mới
                   </p>
                   <div className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground">
                     <Folder className="h-4 w-4 text-primary" />
@@ -694,70 +607,58 @@ function UploadPage() {
             </div>
 
             {!uploadFile && (
-              <div className="m-5 space-y-4">
-                <UploadModeSelector mode={uploadMode} setMode={setUploadMode} />
-
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setIsDragging(true);
-                  }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={handleDrop}
-                  className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition ${
-                    isDragging
-                      ? "border-primary bg-primary/15"
-                      : "border-border bg-background/35 hover:border-primary/50 hover:bg-primary/10"
-                  }`}
-                >
-                  <UploadCloud className="mx-auto h-11 w-11 text-primary" />
-                  <p className="mt-3 text-lg font-bold">
-                    {uploadMode === "link"
-                      ? "Dán link video hoặc chọn file để transcribe"
-                      : "Kéo thả file vào đây"}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {uploadMode === "multi"
-                      ? "Tải nhiều track âm thanh theo từng người nói hoặc chọn file chính trước."
-                      : "hoặc nhấn Upload để chọn file từ máy tính."}
-                  </p>
-                  {uploadMode === "link" && (
-                    <div className="mx-auto mt-5 flex max-w-xl flex-col gap-2 sm:flex-row">
-                      <input
-                        value={videoLink}
-                        onChange={(e) => setVideoLink(e.target.value)}
-                        className="min-w-0 flex-1 rounded-xl border border-border bg-card px-4 py-3 text-sm outline-none focus:border-primary"
-                        placeholder="https://..."
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleVideoLink();
-                        }}
-                        className="rounded-xl bg-primary px-5 py-3 text-sm font-black text-primary-foreground"
-                      >
-                        Dùng link
-                      </button>
+              <div className="m-4 space-y-4">
+                <section className="rounded-xl border border-border bg-[#fbf8ef] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black text-foreground">
+                        1. Chọn nguồn cần chuyển đổi
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Chọn file, nhiều track của cùng một buổi ghi, hoặc link video công khai.
+                      </p>
                     </div>
-                  )}
-                  <div className="mt-4 flex flex-wrap justify-center gap-2">
-                    {FORMAT_TAGS.map((fmt) => (
-                      <span
-                        key={fmt}
-                        className="rounded-full border border-border bg-card px-3 py-1 text-xs font-bold text-muted-foreground"
-                      >
-                        {fmt}
-                      </span>
-                    ))}
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-bold text-primary">
+                      <ListChecks className="h-3.5 w-3.5" />
+                      Bước đầu tiên
+                    </span>
                   </div>
-                </div>
+                  <div className="mt-4">
+                    <UploadModeSelector mode={uploadMode} setMode={setUploadMode} />
+                  </div>
+                </section>
+
+                {uploadMode === "link" ? (
+                  <VideoLinkPanel
+                    videoLink={videoLink}
+                    setVideoLink={setVideoLink}
+                    onSubmit={handleVideoLink}
+                    onChooseFile={() => fileInputRef.current?.click()}
+                  />
+                ) : (
+                  <FileDropzone
+                    isDragging={isDragging}
+                    mode={uploadMode}
+                    onChooseFile={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={handleDrop}
+                  />
+                )}
+
+                <UploadRequirements
+                  mode={uploadMode}
+                  maxUploadMb={quota?.limits.maxUploadMb ?? MAX_MB}
+                  maxFileSeconds={quota?.limits.maxFileSeconds ?? null}
+                />
               </div>
             )}
 
             {uploadFile && (
-              <SonixFileCard
+              <VbeeFileCard
                 filename={uploadFile.name}
                 fileSize={uploadFile.size}
                 status={uploadStatus}
@@ -780,48 +681,50 @@ function UploadPage() {
                 {uploadStatus === "idle" && (
                   <div className="space-y-4">
                     <div className="rounded-xl border border-border bg-background/45 p-4">
-                      <p className="text-sm font-bold">Nội dung âm thanh</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Chọn đúng loại file để backend xử lý âm thanh phù hợp
-                        trước khi chuyển thành văn bản.
-                      </p>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div className="flex items-start gap-3">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <SlidersHorizontal className="h-4 w-4" />
+                        </span>
+                        <div>
+                          <p className="text-sm font-black">2. Thiết lập chuyển đổi</p>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            Chọn ngôn ngữ và cách tạo transcript trước khi gửi file lên máy chủ.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
                         {[
                           {
                             value: "speech" as const,
                             title: "Lời nói rõ",
-                            desc: "Họp, bài giảng, podcast, phỏng vấn.",
+                            description: "Họp, podcast, phỏng vấn, bài giảng.",
                           },
                           {
                             value: "song" as const,
                             title: "Bài hát / nhạc nền",
-                            desc: "Tách vocal bằng Demucs nếu có, fallback ffmpeg.",
+                            description: "Ưu tiên tách vocal bằng Demucs trước khi tạo transcript.",
                           },
                         ].map((item) => (
                           <button
                             key={item.value}
                             type="button"
                             onClick={() => setAudioMode(item.value)}
-                            className={`rounded-xl border px-4 py-3 text-left transition ${
+                            className={`rounded-lg border px-3 py-3 text-left transition ${
                               audioMode === item.value
-                                ? "border-primary bg-primary/15 text-primary"
-                                : "border-border bg-card/60 text-foreground hover:border-primary/50"
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border bg-background/40 hover:border-primary/40"
                             }`}
                           >
-                            <span className="block text-sm font-black">
-                              {item.title}
-                            </span>
-                            <span className="mt-1 block text-xs font-semibold leading-5 text-muted-foreground">
-                              {item.desc}
+                            <span className="block text-xs font-black">{item.title}</span>
+                            <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                              {item.description}
                             </span>
                           </button>
                         ))}
                       </div>
                       {audioMode === "song" && (
-                        <p className="mt-3 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-xs font-semibold leading-5 text-primary">
-                          Backend sẽ ưu tiên tách vocal bằng Demucs nếu server
-                          đã cài, sau đó chuẩn hóa audio rồi mới gửi AI chuyển
-                          thành văn bản.
+                        <p className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5 text-primary">
+                          Backend tách stem vocal bằng Demucs; nếu Demucs không khả dụng, hệ thống tự dùng ffmpeg để làm rõ giọng hát.
                         </p>
                       )}
                     </div>
@@ -863,12 +766,15 @@ function UploadPage() {
                           }
                           className="mt-2 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold outline-none focus:border-primary"
                         >
-                          {SPEECH_LANGUAGE_OPTIONS.map((item) => (
+                          {UPLOAD_LANGUAGE_OPTIONS.map((item) => (
                             <option key={item.value} value={item.value}>
                               {item.label}
                             </option>
                           ))}
                         </select>
+                        <span className="mt-2 block text-xs leading-5 text-muted-foreground">
+                          Chọn đúng ngôn ngữ lời hát hoặc lời nói để tối ưu độ chính xác, đặc biệt khi dùng Sonix.
+                        </span>
                       </label>
                       <label className="rounded-xl border border-border bg-background/45 px-4 py-3 text-left">
                         <span className="text-sm font-bold">
@@ -887,6 +793,9 @@ function UploadPage() {
                         </select>
                       </label>
                     </div>
+                    <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                      Bản dịch được thực hiện sau khi transcript gốc đã tạo xong. Chọn “Tự nhận diện nhiều ngôn ngữ” khi một file có từ hai ngôn ngữ trở lên.
+                    </p>
                     <button
                       onClick={() => void handleUpload()}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
@@ -898,21 +807,7 @@ function UploadPage() {
                   </div>
                 )}
 
-                {uploadStatus === "uploading" && (
-                  <div className="rounded-xl border border-primary/25 bg-primary/10 px-4 py-5 text-center">
-                    <span className="mx-auto block h-10 w-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-                    <p className="mt-3 font-bold text-primary">
-                      {audioMode === "song"
-                        ? "Đang làm rõ vocal và chuyển thành văn bản..."
-                        : "Đang xử lý âm thanh..."}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {audioMode === "song"
-                        ? "Backend ưu tiên Demucs để tách vocal; nếu chưa có Demucs sẽ dùng ffmpeg filter làm rõ giọng."
-                        : "Hệ thống đang phân tích và chuyển giọng nói thành văn bản."}
-                    </p>
-                  </div>
-                )}
+                {uploadStatus === "uploading" && <ProcessingPanel translateTo={translateTo} />}
 
                 {uploadStatus === "error" && (
                   <div className="space-y-3">
@@ -993,12 +888,6 @@ function UploadPage() {
                       </div>
                     )}
 
-                    {audioProcessingNote && (
-                      <div className="rounded-xl border border-primary/25 bg-primary/10 p-4 text-sm font-semibold leading-6 text-primary">
-                        {audioProcessingNote}
-                      </div>
-                    )}
-
                     <div className="grid gap-2 sm:grid-cols-3">
                       <button
                         onClick={() => void handleCopy()}
@@ -1028,11 +917,11 @@ function UploadPage() {
                     </div>
                   </div>
                 )}
-              </SonixFileCard>
+              </VbeeFileCard>
             )}
 
             {history.map((item) => (
-              <SonixFileCard
+              <VbeeFileCard
                 key={item.id}
                 filename={item.filename}
                 fileSize={item.file_size}
@@ -1043,118 +932,18 @@ function UploadPage() {
               />
             ))}
 
-            <div className="border-t border-border bg-background/35 px-5 py-4 text-center text-sm font-black text-primary">
+            <div className="border-t border-border bg-[#fbf8ef] px-5 py-3 text-center text-sm font-black text-primary">
               {history.length + (uploadFile ? 1 : 0)} items,{" "}
               {formatDuration(totalDuration)}
             </div>
           </div>
         </section>
 
-        <aside className="space-y-5 lg:pt-24">
-          <div className="rounded-2xl border border-border bg-card/80 p-6 shadow-soft">
-            <div className="mb-5 flex items-center gap-3">
-              <Heart className="h-7 w-7 text-primary" />
-              <h2 className="text-2xl font-bold leading-tight">
-                Good to see you,
-                <br />
-                {user.firstName}
-              </h2>
-            </div>
-
-            <div className="mb-5 rounded-xl bg-primary/10 p-4">
-              <div className="flex items-center gap-2 text-sm font-black text-primary">
-                <Clock className="h-4 w-4" />
-                Thời gian sử dụng
-                <ArrowRight className="h-4 w-4" />
-              </div>
-              {quota ? (
-                <>
-                  <p className="mt-2 text-2xl font-black text-foreground">
-                    {formatQuotaTime(quota.remainingSeconds)} còn lại
-                  </p>
-                  <p className="text-sm font-semibold text-muted-foreground">
-                    Đã dùng {formatQuotaTime(quota.usedSeconds)} /{" "}
-                    {formatQuotaTime(quota.quotaSeconds)}
-                  </p>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-background/70">
-                    <div
-                      className={`h-full rounded-full ${
-                        quota.isLimitReached ? "bg-destructive" : "bg-primary"
-                      }`}
-                      style={{ width: `${quota.percentUsed}%` }}
-                    />
-                  </div>
-                  {pendingUploadSeconds > 0 &&
-                    projectedRemainingSeconds !== null && (
-                      <p className="mt-3 rounded-lg bg-background/45 px-3 py-2 text-xs font-bold text-muted-foreground">
-                        File đang chọn khoảng{" "}
-                        {formatQuotaTime(pendingUploadSeconds)}. Sau khi xử lý
-                        còn khoảng{" "}
-                        <span className="text-primary">
-                          {formatQuotaTime(projectedRemainingSeconds)}
-                        </span>
-                        .
-                      </p>
-                    )}
-                </>
-              ) : (
-                <>
-                  <p className="mt-2 text-sm font-black text-foreground">
-                    Đang tải thời gian còn lại...
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Quota sẽ tự cập nhật sau mỗi lần transcribe.
-                  </p>
-                </>
-              )}
-            </div>
-
-            <SideSection
-              title="CUSTOMIZE"
-              items={[
-                [Settings, "Transcription settings"],
-                [BookOpen, "Custom dictionary"],
-                [UploadCloud, "Upload settings"],
-              ]}
-              onAction={openFeature}
-            />
-            <SideSection
-              title="AI ANALYSIS"
-              items={[[SlidersHorizontal, "AI analysis settings"]]}
-              onAction={openFeature}
-            />
-            <SideSection
-              title="INTEGRATIONS"
-              items={[
-                [FileAudio, "Zoom integration"],
-                [Mic, "Microsoft Teams integration"],
-                [Zap, "Zapier automation"],
-              ]}
-              onAction={openFeature}
-            />
-            <SideSection
-              title="NEED HELP?"
-              items={[
-                [BookOpen, "Introduction videos"],
-                [MessageCircle, "Help center"],
-              ]}
-              onAction={openFeature}
-            />
-
-            <div className="mt-5 rounded-xl border border-border bg-background/35 p-4">
-              <div className="flex items-center gap-3">
-                <Gift className="h-8 w-8 text-primary" />
-                <p className="text-sm font-black leading-5 text-primary">
-                  REFER A FRIEND AND
-                  <br />
-                  GET 100 FREE MINUTES
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <PhilosophyQuoteCard />
-        </aside>
+        <VbeePreferencesSidebar
+          firstName={user.firstName}
+          refreshKey={quotaRefreshKey}
+          onQuotaChange={setQuota}
+        />
       </main>
 
       <Dialog open={folderOpen} onOpenChange={setFolderOpen}>
@@ -1232,7 +1021,212 @@ function UploadPage() {
         </DialogContent>
       </Dialog>
 
-      <SonixStyleFooter />
+      <VbeeStyleFooter />
+    </div>
+  );
+}
+
+function FileDropzone({
+  isDragging,
+  mode,
+  onChooseFile,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}: {
+  isDragging: boolean;
+  mode: Exclude<UploadMode, "link">;
+  onChooseFile: () => void;
+  onDragOver: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDragLeave: () => void;
+  onDrop: (event: React.DragEvent<HTMLDivElement>) => void;
+}) {
+  const multiTrack = mode === "multi";
+
+  return (
+    <div
+      onClick={onChooseFile}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className={`cursor-pointer rounded-xl border-2 border-dashed p-6 text-center transition ${
+        isDragging
+          ? "border-primary bg-primary/15"
+          : "border-border bg-white hover:border-primary/50 hover:bg-primary/5"
+      }`}
+    >
+      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        {multiTrack ? <AudioLines className="h-6 w-6" /> : <UploadCloud className="h-6 w-6" />}
+      </span>
+      <p className="mt-3 text-base font-black text-foreground">
+        {multiTrack ? "Chọn track âm thanh đầu tiên" : "Kéo thả file vào đây"}
+      </p>
+      <p className="mx-auto mt-1 max-w-xl text-xs leading-5 text-muted-foreground">
+        {multiTrack
+          ? "Mỗi track cần thuộc cùng một phiên ghi và cùng mốc thời gian. Backend hiện xử lý từng file; hãy dùng bản mixdown hoặc tải các track lần lượt."
+          : "Hoặc nhấn để chọn một file audio/video từ máy tính."}
+      </p>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onChooseFile();
+        }}
+        className="mt-4 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-black text-primary-foreground shadow-glow transition hover:opacity-90"
+      >
+        <Upload className="h-3.5 w-3.5" />
+        Chọn file
+      </button>
+      <div className="mt-4 flex flex-wrap justify-center gap-1.5">
+        {FORMAT_TAGS.map((fmt) => (
+          <span
+            key={fmt}
+            className="rounded-full border border-border bg-[#fbf8ef] px-2.5 py-1 text-[11px] font-bold text-muted-foreground"
+          >
+            {fmt}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function VideoLinkPanel({
+  videoLink,
+  setVideoLink,
+  onSubmit,
+  onChooseFile,
+}: {
+  videoLink: string;
+  setVideoLink: (value: string) => void;
+  onSubmit: () => void;
+  onChooseFile: () => void;
+}) {
+  return (
+    <section className="rounded-xl border border-border bg-white p-5">
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Link2 className="h-5 w-5" />
+        </span>
+        <div>
+          <p className="text-sm font-black">Link video công khai</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Dùng URL mà máy chủ có thể truy cập không cần đăng nhập. Video riêng tư, link hết hạn hoặc cần mật khẩu sẽ không thể xử lý.
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <input
+          value={videoLink}
+          onChange={(event) => setVideoLink(event.target.value)}
+          className="min-w-0 flex-1 rounded-lg border border-border bg-[#fbf8ef] px-3 py-2.5 text-sm outline-none transition focus:border-primary"
+          placeholder="https://video.example.com/..."
+        />
+        <button
+          type="button"
+          onClick={onSubmit}
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
+        >
+          <FileVideo className="h-4 w-4" />
+          Dùng link
+        </button>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
+        <p className="text-xs leading-5 text-muted-foreground">
+          Kết nối lấy audio từ link đang được hoàn thiện cho backend Vbee.
+        </p>
+        <button
+          type="button"
+          onClick={onChooseFile}
+          className="text-xs font-black text-primary underline underline-offset-4"
+        >
+          Chọn file từ máy
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function UploadRequirements({
+  mode,
+  maxUploadMb,
+  maxFileSeconds,
+}: {
+  mode: UploadMode;
+  maxUploadMb: number;
+  maxFileSeconds: number | null;
+}) {
+  const multiTrack = mode === "multi";
+  const linkMode = mode === "link";
+
+  return (
+    <section className="rounded-xl border border-border bg-white p-4">
+      <div className="flex items-center gap-2">
+        <Info className="h-4 w-4 text-primary" />
+        <p className="text-sm font-black">Điều kiện trước khi tải</p>
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div>
+          <p className="text-xs font-black text-foreground">Định dạng</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">Audio và video có trong danh sách hiển thị phía trên.</p>
+        </div>
+        <div>
+          <p className="text-xs font-black text-foreground">Giới hạn gói</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Tối đa {maxUploadMb} MB{maxFileSeconds ? `, ${formatQuotaTime(maxFileSeconds)}/file` : " mỗi file"}.
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-black text-foreground">Đa ngôn ngữ</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">Chọn “Tự nhận diện nhiều ngôn ngữ” tại bước thiết lập.</p>
+        </div>
+        <div>
+          <p className="text-xs font-black text-foreground">{linkMode ? "Link" : multiTrack ? "Nhiều track" : "Bản dịch"}</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {linkMode
+              ? "Chỉ dùng link công khai, không cần đăng nhập."
+              : multiTrack
+                ? "Các track cần cùng phiên ghi và được tải lần lượt ở phiên bản hiện tại."
+                : "Bản dịch được tạo sau transcript gốc, không thay thế bản gốc."}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ProcessingPanel({ translateTo }: { translateTo: string }) {
+  const phases = [
+    ["Đang gửi file", "Tải file an toàn lên máy chủ Vbee."],
+    ["Đang phân tích audio gốc", "Nhận diện lời nói, lời hát, thời lượng và người nói từ bản mix ban đầu."],
+    [
+      "Đang tạo transcript",
+      translateTo === "none"
+        ? "Bản transcript sẽ sẵn sàng để nghe lại và biên tập."
+        : "Sau transcript gốc, hệ thống sẽ tạo thêm bản dịch đã chọn.",
+    ],
+  ];
+
+  return (
+    <div className="rounded-xl border border-primary/25 bg-primary/10 p-4">
+      <div className="flex items-center gap-3">
+        <span className="block h-7 w-7 shrink-0 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+        <div>
+          <p className="text-sm font-black text-primary">Vbee đang chuyển đổi file</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Không đóng trang này cho đến khi trạng thái hoàn tất.</p>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        {phases.map(([title, description], index) => (
+          <div key={title} className="rounded-lg border border-primary/15 bg-white/80 px-3 py-2.5">
+            <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${index === 0 ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"}`}>
+              {index === 0 ? <span className="h-2 w-2 rounded-full bg-current animate-pulse" /> : index + 1}
+            </span>
+            <p className="mt-2 text-xs font-black text-foreground">{title}</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1272,21 +1266,28 @@ function UploadTimeEstimatePanel({
           ),
         )
       : 0;
+  const processingMinutes =
+    expectedDuration === null
+      ? null
+      : Math.max(
+          1,
+          Math.ceil(expectedDuration / 75),
+        );
 
   return (
-    <div className="mb-5 rounded-xl border border-primary/25 bg-primary/10 p-4">
+    <div className="mb-4 rounded-lg border border-border bg-[#fbf8ef] p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-black text-primary">
           <Clock className="h-4 w-4" />
           Tính thời gian upload
         </div>
-        <span className="rounded-full bg-card px-3 py-1 text-xs font-black text-primary">
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-primary">
           {uploadStatus === "uploading" ? "Đang xử lý" : "Ước tính trước"}
         </span>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-lg bg-card/70 px-3 py-3">
+      <div className="mt-3 grid gap-2 sm:grid-cols-4">
+        <div className="rounded-md bg-white px-3 py-2.5">
           <p className="text-xs font-bold text-muted-foreground">
             Thời lượng file
           </p>
@@ -1294,7 +1295,15 @@ function UploadTimeEstimatePanel({
             {durationLabel}
           </p>
         </div>
-        <div className="rounded-lg bg-card/70 px-3 py-3">
+        <div className="rounded-md bg-white px-3 py-2.5">
+          <p className="text-xs font-bold text-muted-foreground">
+            Xử lý dự kiến
+          </p>
+          <p className="mt-1 text-lg font-black text-foreground">
+            {processingMinutes === null ? "Đang đọc" : `~${processingMinutes} phút`}
+          </p>
+        </div>
+        <div className="rounded-md bg-white px-3 py-2.5">
           <p className="text-xs font-bold text-muted-foreground">
             Gói còn lại
           </p>
@@ -1302,7 +1311,7 @@ function UploadTimeEstimatePanel({
             {remainingLabel}
           </p>
         </div>
-        <div className="rounded-lg bg-card/70 px-3 py-3">
+        <div className="rounded-md bg-white px-3 py-2.5">
           <p className="text-xs font-bold text-muted-foreground">
             Sau khi xử lý
           </p>
@@ -1329,14 +1338,14 @@ function UploadTimeEstimatePanel({
 
       <p className="mt-3 text-xs font-semibold leading-5 text-muted-foreground">
         {audioMode === "song"
-          ? "File bài hát có thể lâu hơn vì server cần tách vocal trước khi chuyển thành văn bản."
-          : "Khi chuyển xong, hệ thống sẽ trừ theo thời lượng thật của transcript."}
+          ? "File nhạc có thể lâu hơn vì server cần tách vocal trước khi chuyển thành văn bản."
+          : "Đây là ước tính theo thời lượng file; thời gian thực tế phụ thuộc kích thước tệp và tải máy chủ."}
       </p>
     </div>
   );
 }
 
-function SonixFileCard({
+function VbeeFileCard({
   filename,
   fileSize,
   status,
@@ -1360,17 +1369,17 @@ function SonixFileCard({
   const Icon = getFileIcon(filename);
   const statusLabel =
     status === "done"
-      ? "Transcribed"
+      ? "Đã chuyển đổi"
       : status === "uploading"
-        ? "Processing"
+        ? "Đang xử lý"
         : status === "error"
-          ? "Error"
-          : "Ready";
+          ? "Lỗi"
+          : "Sẵn sàng";
 
   return (
-    <div className="border-t border-border px-5 py-5">
-      <div className="grid gap-y-4 text-sm sm:grid-cols-[130px_minmax(0,1fr)]">
-        <p className="font-black text-muted-foreground">File Name</p>
+    <div className="border-t border-border px-4 py-4">
+      <div className="grid gap-y-3 text-sm sm:grid-cols-[120px_minmax(0,1fr)]">
+        <p className="font-black text-muted-foreground">Tên file</p>
         <div className="flex min-w-0 items-center justify-between gap-3">
           <span className="flex min-w-0 items-center gap-2 font-semibold text-primary">
             <Icon className="h-4 w-4 shrink-0" />
@@ -1386,7 +1395,7 @@ function SonixFileCard({
           )}
         </div>
 
-        <p className="font-black text-muted-foreground">Status</p>
+        <p className="font-black text-muted-foreground">Trạng thái</p>
         <div>
           <span
             className={`inline-flex min-w-36 items-center justify-center gap-2 rounded-md px-4 py-2 text-xs font-black ${
@@ -1411,7 +1420,7 @@ function SonixFileCard({
           )}
         </div>
 
-        <p className="font-black text-muted-foreground">Duration</p>
+        <p className="font-black text-muted-foreground">Thời lượng</p>
         <div className="flex flex-wrap items-center gap-3 font-semibold">
           <span>{formatDuration(duration)}</span>
           {fileSize ? (
@@ -1422,11 +1431,11 @@ function SonixFileCard({
           ) : null}
         </div>
 
-        <p className="font-black text-muted-foreground">Date Created</p>
+        <p className="font-black text-muted-foreground">Ngày tạo</p>
         <p className="font-semibold">{formatDate(date)}</p>
       </div>
 
-      {!compact && children && <div className="mt-5">{children}</div>}
+      {!compact && children && <div className="mt-4">{children}</div>}
     </div>
   );
 }
@@ -1439,10 +1448,10 @@ function UploadWorkflowSteps({
   status: UploadStatus;
 }) {
   const steps = [
-    ["1", "Source", "Chọn file, multi-track hoặc video link"],
-    ["2", "Settings", "Ngôn ngữ, speaker labels, folder"],
-    ["3", "Transcribe", "AI xử lý và tạo transcript"],
-    ["4", "Editor", "Nghe lại, sửa, copy và export"],
+    ["1", "Nguồn", "Chọn file, nhiều track hoặc link video"],
+    ["2", "Cài đặt", "Ngôn ngữ, người nói và thư mục"],
+    ["3", "Chuyển đổi", "AI xử lý và tạo transcript"],
+    ["4", "Biên tập", "Nghe lại, sửa, copy và xuất file"],
   ];
   const activeIndex =
     status === "done" ? 3 : status === "uploading" ? 2 : hasFile ? 1 : 0;
@@ -1454,10 +1463,10 @@ function UploadWorkflowSteps({
         return (
           <div
             key={title}
-            className={`rounded-xl border px-4 py-3 transition ${
+            className={`rounded-lg border px-3 py-2.5 transition ${
               active
-                ? "border-primary/40 bg-primary/10"
-                : "border-border bg-card/55"
+                ? "border-primary/30 bg-primary/5"
+                : "border-border bg-white"
             }`}
           >
             <div className="flex items-center gap-2">
@@ -1501,26 +1510,26 @@ function UploadModeSelector({
   }> = [
     {
       value: "single",
-      title: "Single-track",
+      title: "Một track",
       desc: "Một file audio/video chính",
       icon: FileAudio,
     },
     {
       value: "multi",
-      title: "Multi-track",
+      title: "Nhiều track",
       desc: "Chuẩn bị cho nhiều người nói",
       icon: Mic,
     },
     {
       value: "link",
-      title: "Video link",
+      title: "Link video",
       desc: "Dán link hoặc chọn file thay thế",
       icon: Languages,
     },
   ];
 
   return (
-    <div className="grid gap-3 md:grid-cols-3">
+    <div className="grid gap-2 md:grid-cols-3">
       {modes.map((item) => {
         const Icon = item.icon;
         const active = mode === item.value;
@@ -1528,10 +1537,10 @@ function UploadModeSelector({
           <button
             key={item.value}
             onClick={() => setMode(item.value)}
-            className={`rounded-2xl border p-4 text-left transition ${
+            className={`rounded-lg border p-3 text-left transition ${
               active
-                ? "border-primary/60 bg-primary/10 text-foreground"
-                : "border-border bg-background/35 text-muted-foreground hover:border-primary/40"
+                ? "border-primary/40 bg-primary/5 text-foreground"
+                : "border-border bg-white text-muted-foreground hover:border-primary/40"
             }`}
           >
             <Icon className="mb-3 h-5 w-5 text-primary" />
@@ -1544,50 +1553,18 @@ function UploadModeSelector({
   );
 }
 
-function SideSection({
-  title,
-  items,
-  onAction,
-}: {
-  title: string;
-  items: Array<[ComponentType<{ className?: string }>, string]>;
-  onAction: (label: string) => void;
-}) {
+function VbeeStyleFooter() {
   return (
-    <div className="mt-5">
-      <h3 className="mb-2 text-sm font-black text-primary">{title}</h3>
-      <div className="overflow-hidden rounded-xl border border-border">
-        {items.map(([Icon, label]) => (
-          <button
-            key={label}
-            onClick={() => onAction(label)}
-            className="flex w-full items-center gap-3 border-b border-border bg-background/35 px-4 py-3 text-left text-sm font-semibold text-muted-foreground transition last:border-b-0 hover:bg-primary/10 hover:text-primary"
-          >
-            <Icon className="h-4 w-4 text-primary" />
-            {label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SonixStyleFooter() {
-  return (
-    <footer className="mt-10 border-t border-border bg-card/70 px-4 py-8 text-center text-sm text-muted-foreground">
+    <footer className="mt-8 border-t border-border bg-white px-4 py-6 text-center text-sm text-muted-foreground">
       <p>© 2026 Vbee Voice. All rights reserved.</p>
       <div className="mt-3 flex flex-wrap justify-center gap-x-6 gap-y-2 font-semibold text-primary">
-        <Link to="/">Home</Link>
-        <Link to="/pricing">Pricing</Link>
-        <Link to="/upload">Upload</Link>
+        <Link to="/">Vbee</Link>
+        <Link to="/pricing">Bảng giá</Link>
+        <Link to="/upload">Tải file</Link>
         <Link to="/api">API</Link>
-        <Link to="/dashboard" search={{ token: undefined }}>
-          Studio
-        </Link>
       </div>
       <p className="mt-5 inline-flex items-center justify-center gap-2">
-        Made with <Heart className="h-4 w-4 text-primary" /> and{" "}
-        <FileAudio className="h-4 w-4 text-primary" /> in your AI voice studio
+        Được phát triển cho trải nghiệm chuyển giọng nói thành văn bản rõ ràng.
       </p>
     </footer>
   );
