@@ -383,7 +383,7 @@ function DashboardPage() {
     `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase();
 
   return (
-    <div className="relative min-h-screen bg-background text-foreground overflow-x-hidden">
+    <div className="relative min-h-screen overflow-x-hidden bg-background font-sans text-foreground antialiased">
       {/* ── Nền ──────────────────────────────────────────────────────── */}
       <div className="absolute inset-0 bg-gradient-hero pointer-events-none" />
       <div className="absolute top-[8%]  left-[5%]   h-80 w-80 rounded-full bg-primary/15 blur-3xl animate-float pointer-events-none" />
@@ -509,7 +509,7 @@ function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <Heart className="h-10 w-10 text-primary" />
-                  <h1 className="text-3xl font-light tracking-tight text-foreground md:text-5xl">
+                  <h1 className="text-2xl font-light tracking-tight text-foreground md:text-3xl">
                     Chào mừng, {user.firstName}
                   </h1>
                 </div>
@@ -523,10 +523,13 @@ function DashboardPage() {
               </Link>
             </div>
 
-            <div className="mb-3 flex items-center justify-center rounded-md border border-border bg-card/75 px-4 py-2 text-sm font-bold text-foreground/85 shadow-soft">
+            <Link
+              to="/"
+              className="mb-3 flex items-center justify-center rounded-md border border-border bg-card/75 px-4 py-2 text-sm font-bold text-foreground/85 shadow-soft transition hover:border-primary/45 hover:bg-primary/5 hover:text-primary"
+            >
               <Home className="mr-2 h-4 w-4 text-primary" />
               Trang chủ
-            </div>
+            </Link>
 
             <div className="grid grid-cols-2 gap-2 sm:flex">
               <Link
@@ -668,7 +671,7 @@ function DashboardPage() {
                   {initials}
                 </span>
               )}
-              <h2 className="text-2xl font-bold leading-tight">
+              <h2 className="text-xl font-bold leading-tight">
                 Xin chào,
                 <br />
                 {user.firstName}

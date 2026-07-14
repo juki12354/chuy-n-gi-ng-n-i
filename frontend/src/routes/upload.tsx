@@ -14,6 +14,7 @@ import {
   FolderPlus,
   HardDrive,
   Heart,
+  Home,
   Info,
   Languages,
   Link2,
@@ -523,6 +524,16 @@ function UploadPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <AuthenticatedHeader />
+
+      <div className="mx-auto max-w-7xl px-4 pt-3 md:px-6">
+        <Link
+          to="/dashboard"
+          className="flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white text-sm font-bold text-[#21104a] shadow-sm transition hover:border-primary/45 hover:bg-[#fbf8ef] hover:text-primary"
+        >
+          <Home className="h-4 w-4" />
+          Home
+        </Link>
+      </div>
 
       <input
         ref={fileInputRef}
