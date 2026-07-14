@@ -528,7 +528,7 @@ function UploadPage() {
       <div className="mx-auto max-w-7xl px-4 pt-3 md:px-6">
         <Link
           to="/dashboard"
-          className="flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-white text-sm font-bold text-[#21104a] shadow-sm transition hover:border-primary/45 hover:bg-[#fbf8ef] hover:text-primary"
+          className="mb-3 flex items-center justify-center gap-2 rounded-md border border-border bg-card/75 px-4 py-2 text-sm font-bold text-foreground/85 shadow-soft transition hover:border-primary/45 hover:bg-primary/5 hover:text-primary"
         >
           <Home className="h-4 w-4" />
           Home
