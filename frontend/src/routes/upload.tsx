@@ -525,16 +525,6 @@ function UploadPage() {
     <div className="min-h-screen bg-background text-foreground">
       <AuthenticatedHeader />
 
-      <div className="mx-auto max-w-7xl px-4 pt-3 md:px-6">
-        <Link
-          to="/dashboard"
-          className="mb-3 flex items-center justify-center gap-2 rounded-md border border-border bg-card/75 px-4 py-2 text-sm font-bold text-foreground/85 shadow-soft transition hover:border-primary/45 hover:bg-primary/5 hover:text-primary"
-        >
-          <Home className="h-4 w-4" />
-          Home
-        </Link>
-      </div>
-
       <input
         ref={fileInputRef}
         type="file"
@@ -555,6 +545,14 @@ function UploadPage() {
                 Chào mừng, {user.firstName}
               </h1>
             </div>
+
+            <Link
+              to="/dashboard"
+              className="mb-3 flex items-center justify-center rounded-md border border-border bg-card/75 px-4 py-2 text-sm font-bold text-foreground/85 shadow-soft transition hover:border-primary/45 hover:bg-primary/5 hover:text-primary"
+            >
+              <Home className="mr-2 h-4 w-4 text-primary" />
+              Home
+            </Link>
 
             <div className="grid grid-cols-[1fr_1fr_44px] gap-2 sm:flex">
               <button
