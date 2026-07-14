@@ -226,7 +226,7 @@ function LandingPage() {
 
   function startApp() {
     if (user) {
-      void navigate({ to: "/upload" });
+      void navigate({ to: "/dashboard" });
       return;
     }
     void navigate({
