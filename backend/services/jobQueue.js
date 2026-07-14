@@ -181,6 +181,12 @@ class JobQueue {
       startedAt: job.startedAt,
       finishedAt: job.finishedAt,
       error: job.error,
+      input: job.data?.file
+        ? {
+            filename: job.data.file.originalname,
+            fileSize: job.data.file.size,
+          }
+        : null,
       result: job.result,
     };
   }

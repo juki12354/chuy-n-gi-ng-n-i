@@ -114,7 +114,7 @@ function LoginPage() {
             Đăng nhập vào <span className="mt-1 block text-[#21104a]">Vbee AIVoice</span>
           </h1>
           <p className="mt-4 text-sm text-muted-foreground max-w-sm">
-            Dùng email/password để vào dashboard ngay. Google Login vẫn hỗ trợ khi bạn cấu hình OAuth.
+            Dùng email/password để vào trang upload ngay. Google Login vẫn hỗ trợ khi bạn cấu hình OAuth.
           </p>
 
           <div className="mt-6 grid w-full max-w-sm grid-cols-3 gap-2">

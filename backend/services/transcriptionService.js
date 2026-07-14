@@ -33,6 +33,18 @@ const SONIX_TIMEOUT_MS = Number.parseInt(
 const DEEPGRAM_API_BASE_URL = (
   process.env.DEEPGRAM_API_BASE_URL || "https://api.deepgram.com/v1"
 ).replace(/\/$/, "");
+const DEEPGRAM_TIMEOUT_MS = Number.parseInt(
+  process.env.DEEPGRAM_TIMEOUT_MS || `${10 * 60 * 1000}`,
+  10,
+);
+const DEEPGRAM_MAX_RETRIES = Number.parseInt(
+  process.env.DEEPGRAM_MAX_RETRIES || "2",
+  10,
+);
+const DEEPGRAM_RETRY_DELAY_MS = Number.parseInt(
+  process.env.DEEPGRAM_RETRY_DELAY_MS || "2000",
+  10,
+);
 
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
@@ -320,6 +332,16 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isRetryableProviderError(error) {
+  return [408, 429, 500, 502, 503, 504].includes(Number(error?.statusCode));
+}
+
+function createAbortController(timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return { controller, timer };
+}
+
 async function readResponseBody(response) {
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
@@ -560,15 +582,49 @@ async function transcribeWithDeepgram({
     }
   }
 
-  const response = await fetch(`${DEEPGRAM_API_BASE_URL}/listen?${params}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Token ${getDeepgramApiKey()}`,
-      "Content-Type": file.mimetype || "application/octet-stream",
-    },
-    body: file.buffer,
-  });
-  const body = await readResponseBody(response);
+  let body;
+  let lastError;
+  for (let attempt = 0; attempt <= DEEPGRAM_MAX_RETRIES; attempt += 1) {
+    const { controller, timer } = createAbortController(DEEPGRAM_TIMEOUT_MS);
+    try {
+      const response = await fetch(`${DEEPGRAM_API_BASE_URL}/listen?${params}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Token ${getDeepgramApiKey()}`,
+          "Content-Type": file.mimetype || "application/octet-stream",
+        },
+        body: file.buffer,
+        signal: controller.signal,
+      });
+      body = await readResponseBody(response);
+      break;
+    } catch (error) {
+      lastError =
+        error?.name === "AbortError"
+          ? createHttpError(
+              408,
+              `Deepgram xử lý quá thời gian chờ ${Math.round(
+                DEEPGRAM_TIMEOUT_MS / 1000,
+              )} giây`,
+            )
+          : error;
+
+      if (
+        attempt >= DEEPGRAM_MAX_RETRIES ||
+        !isRetryableProviderError(lastError)
+      ) {
+        throw lastError;
+      }
+
+      await delay(DEEPGRAM_RETRY_DELAY_MS * (attempt + 1));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  if (!body) {
+    throw lastError || createHttpError(502, "Deepgram không trả về kết quả");
+  }
   const metadata = body?.metadata || {};
 
   return {

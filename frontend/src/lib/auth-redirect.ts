@@ -5,6 +5,7 @@ const AUTH_REDIRECT_ALLOWLIST = new Set([
   "/record",
   "/realtime",
   "/history",
+  "/profile",
   "/api",
   "/pricing",
   "/custom-dictionary",

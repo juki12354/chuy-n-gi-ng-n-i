@@ -134,9 +134,9 @@ npm run dev
 ```
 Trang chủ → Bấm nút → Chuyển đến /login
 /login → Bấm "Đăng nhập bằng Google" → Google OAuth
-  → Đã có tài khoản → /dashboard (đăng nhập thành công)
+  → Đã có tài khoản → /upload (đăng nhập thành công)
   → Chưa có → /register (nhập first name, last name, email, password)
-              → Tạo xong → /dashboard
+              → Tạo xong → /upload
 ```
 
 ## Biến môi trường Backend (.env)

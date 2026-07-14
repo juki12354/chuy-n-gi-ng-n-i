@@ -59,7 +59,7 @@ function ProfilePage() {
 
   useEffect(() => {
     if (!token) return;
-    void fetch(`${API_URL}/api/quota/status`, {
+    void fetch(`${API_URL}/api/quota`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((response) =>

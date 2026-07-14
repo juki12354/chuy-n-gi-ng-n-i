@@ -11,6 +11,17 @@ const router = express.Router();
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-in-production';
+const USAGE_ALERT_REDIRECT_PATH =
+  process.env.USAGE_ALERT_REDIRECT_PATH || '/upload';
+
+function getUsageAlertRedirectUrl(status) {
+  const baseUrl = FRONTEND_URL.replace(/\/$/, '');
+  const path = USAGE_ALERT_REDIRECT_PATH.startsWith('/')
+    ? USAGE_ALERT_REDIRECT_PATH
+    : `/${USAGE_ALERT_REDIRECT_PATH}`;
+  const separator = path.includes('?') ? '&' : '?';
+  return `${baseUrl}${path}${separator}usageAlert=${encodeURIComponent(status)}`;
+}
 
 function generateToken(user) {
   return jwt.sign(
@@ -107,9 +118,9 @@ router.get(
       );
 
       if (rows.length > 0) {
-        // User đã có tài khoản → tạo token, redirect về dashboard
+        // User đã có tài khoản → tạo token, redirect về trang upload
         const token = generateToken(rows[0]);
-        return res.redirect(`${FRONTEND_URL}/dashboard?token=${token}`);
+        return res.redirect(`${FRONTEND_URL}/upload?token=${token}`);
       }
 
       // User mới → redirect về trang đăng ký với thông tin Google
@@ -225,18 +236,18 @@ router.get('/usage-alert/confirm', async (req, res) => {
   try {
     const token = String(req.query.token || '').trim();
     if (!token) {
-      return res.redirect(`${FRONTEND_URL}/dashboard?usageAlert=missing_token`);
+      return res.redirect(getUsageAlertRedirectUrl('missing_token'));
     }
 
     const confirmed = await confirmUsageAlertToken(token);
     if (!confirmed) {
-      return res.redirect(`${FRONTEND_URL}/dashboard?usageAlert=invalid_token`);
+      return res.redirect(getUsageAlertRedirectUrl('invalid_token'));
     }
 
-    return res.redirect(`${FRONTEND_URL}/dashboard?usageAlert=confirmed`);
+    return res.redirect(getUsageAlertRedirectUrl('confirmed'));
   } catch (error) {
     console.error('Confirm usage alert error:', error);
-    return res.redirect(`${FRONTEND_URL}/dashboard?usageAlert=server_error`);
+    return res.redirect(getUsageAlertRedirectUrl('server_error'));
   }
 });
 

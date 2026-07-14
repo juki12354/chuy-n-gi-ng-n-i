@@ -728,7 +728,7 @@ function HistoryPage() {
                         }
                       />
 
-                      <div className="rounded-lg border border-border bg-[#fbf8ef] px-4 py-3">
+                      <div className="rounded-2xl border border-border bg-background/60 px-5 py-4">
                         <p className="text-xs text-muted-foreground mb-2">
                           Văn bản — có thể chỉnh sửa trực tiếp
                         </p>

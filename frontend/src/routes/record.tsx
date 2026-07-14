@@ -28,6 +28,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Document, Packer, Paragraph, TextRun } from "docx";
+import vbeeLogo from "@/assets/vbee-logo.png";
 import { useAuth } from "@/context/AuthContext";
 import { AuthenticatedHeader } from "@/components/auth-app-header";
 import {
@@ -35,7 +36,6 @@ import {
   type TranscriptSegment,
 } from "@/components/transcript-segments";
 import { VbeeAccountUsageCard } from "@/components/vbee-preferences-layout";
-import vbeeLogo from "@/assets/vbee-logo.png";
 import { formatQuotaTime, type QuotaStatus } from "@/lib/quota";
 import {
   SPEECH_LANGUAGE_OPTIONS,
@@ -555,13 +555,14 @@ function RecordPage() {
   async function handleDownload() {
     const text = editRef.current?.textContent ?? transcription;
     const translated = translation?.text?.trim();
-    const lines = translated
+    const translationTargetLanguage = translation?.targetLanguage;
+    const lines = translated && translationTargetLanguage
       ? [
           "Transcript gốc",
           "",
           text,
           "",
-          `Bản dịch (${languageLabel(translation.targetLanguage)})`,
+          `Bản dịch (${languageLabel(translationTargetLanguage)})`,
           "",
           translated,
         ]
@@ -590,13 +591,14 @@ function RecordPage() {
   function handleDownloadTxt() {
     const text = editRef.current?.textContent ?? transcription;
     const translated = translation?.text?.trim();
-    const content = translated
+    const translationTargetLanguage = translation?.targetLanguage;
+    const content = translated && translationTargetLanguage
       ? [
           "Transcript gốc",
           "",
           text,
           "",
-          `Bản dịch (${languageLabel(translation.targetLanguage)})`,
+          `Bản dịch (${languageLabel(translationTargetLanguage)})`,
           "",
           translated,
         ].join("\n")
@@ -975,8 +977,10 @@ function RecorderReadinessPanel({
     ? Math.min(quota.remainingSeconds, quota.limits.maxRecordSeconds)
     : null;
   const nearLimit =
-    Boolean(quota && isLive && remainingAfterRecord !== null) &&
-    remainingAfterRecord <= Math.max(30, quota!.alertSeconds);
+    quota !== null &&
+    isLive &&
+    remainingAfterRecord !== null &&
+    remainingAfterRecord <= Math.max(30, quota.alertSeconds);
   const statusColor =
     micStatus === "ready"
       ? "text-primary"

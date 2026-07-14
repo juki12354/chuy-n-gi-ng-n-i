@@ -80,6 +80,42 @@ interface HistoryItem {
 type SpeakerNames = Record<string, string>;
 
 type UploadStatus = "idle" | "uploading" | "done" | "error";
+type FileCardStatus = UploadStatus | "queued";
+type TranscriptionJobStatus = "queued" | "processing" | "completed" | "failed";
+type TranscriptionResultPayload = {
+  id?: number;
+  text?: string;
+  duration?: number;
+  error?: string;
+  words?: Word[];
+  segments?: TranscriptSegment[];
+  speaker_names?: SpeakerNames;
+  filename?: string;
+  createdAt?: string;
+  quota?: QuotaStatus;
+  sourceLanguage?: string | null;
+  translation?: TranslationResult | null;
+  translationError?: string;
+  preprocessingApplied?: boolean;
+  preprocessingMethod?: "demucs" | "ffmpeg" | string | null;
+  preprocessingWarning?: string | null;
+};
+type TranscriptionJob = {
+  id: string;
+  status: TranscriptionJobStatus;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  attempts: number;
+  maxRetries: number;
+  error: { message?: string } | null;
+  input?: {
+    filename?: string;
+    fileSize?: number;
+  };
+  result: TranscriptionResultPayload | null;
+};
 type UploadMode = "single" | "multi" | "link";
 type AudioMode = "speech" | "song";
 type ActionDialogState = {
@@ -120,6 +156,13 @@ function getFileIcon(filename: string) {
   if (filename.startsWith("recording.")) return Mic;
   if (/\.(mp4|webm)$/i.test(filename)) return FileAudio;
   return AudioLines;
+}
+
+function getJobCardStatus(status: TranscriptionJobStatus): FileCardStatus {
+  if (status === "completed") return "done";
+  if (status === "processing") return "uploading";
+  if (status === "failed") return "error";
+  return "queued";
 }
 
 function readMediaDuration(file: File) {
@@ -168,6 +211,7 @@ function UploadPage() {
     null,
   );
   const [translationError, setTranslationError] = useState("");
+  const [audioProcessingNote, setAudioProcessingNote] = useState("");
   const [words, setWords] = useState<Word[]>([]);
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
   const [speakerNames, setSpeakerNames] = useState<SpeakerNames>({});
@@ -176,6 +220,7 @@ function UploadPage() {
   >(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [jobs, setJobs] = useState<TranscriptionJob[]>([]);
   const [uploadMode, setUploadMode] = useState<UploadMode>("single");
   const [videoLink, setVideoLink] = useState("");
   const [folderOpen, setFolderOpen] = useState(false);
@@ -211,6 +256,50 @@ function UploadPage() {
       .then((r) => (r.ok ? (r.json() as Promise<HistoryItem[]>) : []))
       .then((data) => setHistory(data.slice(0, 4)))
       .catch(() => setHistory([]));
+  }, [user, token]);
+
+  useEffect(() => {
+    if (!user || !token) return;
+
+    let cancelled = false;
+    let timer: number | undefined;
+
+    async function fetchJobs() {
+      try {
+        const response = await fetch(`${API_URL}/api/transcribe/jobs?limit=10`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = (await response.json()) as { jobs?: TranscriptionJob[] };
+        if (cancelled) return;
+
+        const nextJobs = response.ok && Array.isArray(data.jobs) ? data.jobs : [];
+        setJobs(nextJobs);
+
+        const hasRunningJob = nextJobs.some((job) =>
+          ["queued", "processing"].includes(job.status),
+        );
+        if (hasRunningJob) {
+          timer = window.setTimeout(fetchJobs, 3000);
+        } else {
+          void fetch(`${API_URL}/api/transcribe/history`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+            .then((r) => (r.ok ? (r.json() as Promise<HistoryItem[]>) : []))
+            .then((items) => {
+              if (!cancelled) setHistory(items.slice(0, 4));
+            })
+            .catch(() => {});
+        }
+      } catch {
+        if (!cancelled) setJobs([]);
+      }
+    }
+
+    void fetchJobs();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
   }, [user, token]);
 
   useEffect(() => {
@@ -252,6 +341,19 @@ function UploadPage() {
     );
     return historySeconds + (duration ?? 0);
   }, [duration, history]);
+
+  const visibleJobs = useMemo(
+    () =>
+      jobs.filter((job) => {
+        if (job.status !== "completed") return true;
+        const resultId = job.result?.id;
+        return Boolean(resultId && !history.some((item) => item.id === resultId));
+      }),
+    [history, jobs],
+  );
+
+  const listItemCount =
+    history.length + visibleJobs.length + (uploadFile ? 1 : 0);
 
   const pendingUploadSeconds =
     uploadFile && uploadStatus !== "done" && expectedDuration
@@ -360,63 +462,36 @@ function UploadPage() {
           String(Math.ceil(expectedDuration)),
         );
       }
-      const res = await fetch(`${API_URL}/api/transcribe`, {
+      const res = await fetch(`${API_URL}/api/transcribe/jobs`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
       const data = (await res.json()) as {
-        id?: number;
-        text?: string;
-        duration?: number;
+        job?: TranscriptionJob;
         error?: string;
-        words?: Word[];
-        segments?: TranscriptSegment[];
-        speaker_names?: SpeakerNames;
-        filename?: string;
-        createdAt?: string;
         quota?: QuotaStatus;
-        translation?: TranslationResult | null;
-        translationError?: string;
       };
       if (!res.ok) {
         if (data.quota) setQuota(data.quota);
-        setUploadError(data.error ?? "Chuyển đổi thất bại");
+        setUploadError(data.error ?? "Không thể tạo job chuyển đổi");
         setUploadStatus("error");
         return;
       }
-      setTranscription(data.text ?? "");
-      setTranslation(data.translation ?? null);
-      setTranslationError(data.translationError ?? "");
-      setDuration(data.duration ?? null);
-      setWords(data.words ?? []);
-      setSegments(data.segments ?? []);
-      setSpeakerNames(data.speaker_names ?? {});
-      setCurrentTranscriptionId(data.id ?? null);
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      setAudioUrl(URL.createObjectURL(uploadFile));
-      setUploadStatus("done");
-      setQuotaRefreshKey((key) => key + 1);
-      if (data.quota) setQuota(data.quota);
-      if (data.id) {
-        setHistory((prev) =>
-          [
-            {
-              id: data.id!,
-              filename: data.filename ?? uploadFile.name,
-              file_size: uploadFile.size,
-              duration: data.duration ?? null,
-              text: data.text ?? "",
-              translated_text: data.translation?.text ?? null,
-              translation_target_language:
-                data.translation?.targetLanguage ?? null,
-              source_language: data.translation?.sourceLanguage ?? null,
-              created_at: data.createdAt ?? new Date().toISOString(),
-            },
-            ...prev.filter((item) => item.id !== data.id),
-          ].slice(0, 4),
-        );
+      if (!data.job) {
+        setUploadError("Server chưa trả về thông tin job");
+        setUploadStatus("error");
+        return;
       }
+
+      setJobs((prev) => [
+        data.job!,
+        ...prev.filter((job) => job.id !== data.job!.id),
+      ]);
+      setUploadFile(null);
+      setUploadStatus("idle");
+      setExpectedDuration(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     } catch {
       setUploadError("Không thể kết nối đến server");
       setUploadStatus("error");
@@ -433,13 +508,14 @@ function UploadPage() {
   async function handleDownload() {
     const text = editRef.current?.textContent ?? transcription;
     const translated = translation?.text?.trim();
-    const lines = translated
+    const translationTargetLanguage = translation?.targetLanguage;
+    const lines = translated && translationTargetLanguage
       ? [
           "Transcript gốc",
           "",
           text,
           "",
-          `Bản dịch (${languageLabel(translation.targetLanguage)})`,
+          `Bản dịch (${languageLabel(translationTargetLanguage)})`,
           "",
           translated,
         ]
@@ -469,13 +545,14 @@ function UploadPage() {
   function handleDownloadTxt() {
     const text = editRef.current?.textContent ?? transcription;
     const translated = translation?.text?.trim();
-    const content = translated
+    const translationTargetLanguage = translation?.targetLanguage;
+    const content = translated && translationTargetLanguage
       ? [
           "Transcript gốc",
           "",
           text,
           "",
-          `Bản dịch (${languageLabel(translation.targetLanguage)})`,
+          `Bản dịch (${languageLabel(translationTargetLanguage)})`,
           "",
           translated,
         ].join("\n")
@@ -656,7 +733,7 @@ function UploadPage() {
                   </div>
                 </div>
                 <div className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-                  {history.length + (uploadFile ? 1 : 0)} items
+                  {listItemCount} items
                 </div>
               </div>
             </div>
@@ -856,7 +933,7 @@ function UploadPage() {
                       className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
                     >
                       <Zap className="h-4 w-4" />
-                      Bắt đầu chuyển đổi
+                      Tạo STT job
                       <ArrowRight className="h-4 w-4" />
                     </button>
                   </div>
@@ -996,6 +1073,23 @@ function UploadPage() {
               </VbeeFileCard>
             )}
 
+            {visibleJobs.map((job) => (
+              <VbeeFileCard
+                key={job.id}
+                filename={
+                  job.result?.filename ??
+                  job.input?.filename ??
+                  `Job ${job.id.slice(0, 8)}`
+                }
+                fileSize={job.input?.fileSize}
+                status={getJobCardStatus(job.status)}
+                duration={job.result?.duration ?? null}
+                date={job.createdAt}
+                error={job.error?.message}
+                compact
+              />
+            ))}
+
             {history.map((item) => (
               <VbeeFileCard
                 key={item.id}
@@ -1009,7 +1103,7 @@ function UploadPage() {
             ))}
 
             <div className="border-t border-border bg-[#fbf8ef] px-5 py-3 text-center text-sm font-black text-primary">
-              {history.length + (uploadFile ? 1 : 0)} items,{" "}
+              {listItemCount} items,{" "}
               {formatDuration(totalDuration)}
             </div>
           </div>
@@ -1434,7 +1528,7 @@ function VbeeFileCard({
 }: {
   filename: string;
   fileSize?: number;
-  status: UploadStatus;
+  status: FileCardStatus;
   duration?: number | null;
   date: string;
   error?: string;
@@ -1448,6 +1542,8 @@ function VbeeFileCard({
       ? "Đã chuyển đổi"
       : status === "uploading"
         ? "Đang xử lý"
+        : status === "queued"
+          ? "Đang chờ"
         : status === "error"
           ? "Lỗi"
           : "Sẵn sàng";
@@ -1479,11 +1575,19 @@ function VbeeFileCard({
                 ? "bg-destructive/15 text-destructive"
                 : status === "idle"
                   ? "bg-primary/10 text-primary"
-                  : "bg-emerald-500 text-white"
+                  : status === "queued"
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-emerald-500 text-white"
             }`}
           >
-            {status === "uploading" ? (
-              <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+            {status === "uploading" || status === "queued" ? (
+              <span
+                className={`h-3 w-3 rounded-full border-2 animate-spin ${
+                  status === "queued"
+                    ? "border-amber-300 border-t-amber-700"
+                    : "border-white/40 border-t-white"
+                }`}
+              />
             ) : (
               status !== "error" && <Check className="h-3.5 w-3.5" />
             )}

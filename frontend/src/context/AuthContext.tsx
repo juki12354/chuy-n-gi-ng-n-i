@@ -90,10 +90,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    const stored =
-      typeof window !== "undefined"
-        ? localStorage.getItem(TOKEN_STORAGE_KEY)
-        : null;
+    if (typeof window === "undefined") {
+      setIsLoading(false);
+      return;
+    }
+
+    const currentUrl = new URL(window.location.href);
+    const tokenFromUrl = currentUrl.searchParams.get("token");
+
+    if (tokenFromUrl) {
+      currentUrl.searchParams.delete("token");
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`,
+      );
+      localStorage.setItem(TOKEN_STORAGE_KEY, tokenFromUrl);
+      setTokenState(tokenFromUrl);
+      void fetchUser(tokenFromUrl);
+      return;
+    }
+
+    const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
     if (stored) {
       setTokenState(stored);
       void fetchUser(stored);

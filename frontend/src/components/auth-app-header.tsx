@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   History,
+  Home,
   LogOut,
   Menu,
   Mic,
