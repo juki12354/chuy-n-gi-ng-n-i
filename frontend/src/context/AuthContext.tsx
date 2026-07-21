@@ -1,7 +1,9 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -10,7 +12,7 @@ import type { PlanCode } from "@/lib/quota";
 const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ??
   "http://localhost:3001";
-const TOKEN_STORAGE_KEY = "auth_token";
+const TOKEN_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
 interface User {
   id: number;
@@ -43,8 +45,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [token, setTokenState] = useState<string | null>(null);
+  const refreshInFlight = useRef<Promise<boolean> | null>(null);
 
-  async function fetchUser(authToken: string) {
+  const fetchUser = useCallback(async (authToken: string) => {
     setIsLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/auth/me`, {
@@ -54,18 +57,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = (await res.json()) as User;
       setUser(data);
     } catch {
-      if (typeof window !== "undefined")
-        localStorage.removeItem(TOKEN_STORAGE_KEY);
       setTokenState(null);
       setUser(null);
     } finally {
       setIsLoading(false);
     }
-  }
+  }, []);
+
+  const refreshSession = useCallback(({ showLoading = false } = {}) => {
+    if (refreshInFlight.current) return refreshInFlight.current;
+    if (showLoading) setIsLoading(true);
+
+    const run = async () => {
+      try {
+        const requestRefresh = () =>
+          fetch(`${API_URL}/api/auth/refresh`, {
+            method: "POST",
+            credentials: "include",
+          });
+        let res = await requestRefresh();
+        let data = (await res.json().catch(() => ({}))) as {
+          token?: string;
+          user?: User;
+          retry?: boolean;
+        };
+        if (res.status === 409 && data.retry) {
+          await new Promise((resolve) => window.setTimeout(resolve, 300));
+          res = await requestRefresh();
+          data = (await res.json().catch(() => ({}))) as typeof data;
+        }
+        if (!res.ok || !data.token || !data.user) throw new Error("no session");
+        setTokenState(data.token);
+        setUser(data.user);
+        return true;
+      } catch {
+        setTokenState(null);
+        setUser(null);
+        return false;
+      } finally {
+        if (showLoading) setIsLoading(false);
+      }
+    };
+
+    refreshInFlight.current = run().finally(() => {
+      refreshInFlight.current = null;
+    });
+    return refreshInFlight.current;
+  }, []);
 
   function setToken(newToken: string) {
-    if (typeof window !== "undefined")
-      localStorage.setItem(TOKEN_STORAGE_KEY, newToken);
     setTokenState(newToken);
     void fetchUser(newToken);
   }
@@ -76,31 +116,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function logout() {
     const currentToken = token;
-    if (currentToken) {
-      void fetch(`${API_URL}/api/auth/logout`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${currentToken}` },
-      }).catch(() => {});
-    }
-
-    if (typeof window !== "undefined")
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
+    void fetch(`${API_URL}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+      headers: currentToken
+        ? { Authorization: `Bearer ${currentToken}` }
+        : undefined,
+    }).catch(() => {});
     setTokenState(null);
     setUser(null);
   }
 
   useEffect(() => {
-    const stored =
-      typeof window !== "undefined"
-        ? localStorage.getItem(TOKEN_STORAGE_KEY)
-        : null;
-    if (stored) {
-      setTokenState(stored);
-      void fetchUser(stored);
-    } else {
-      setIsLoading(false);
-    }
-  }, []);
+    localStorage.removeItem("auth_token");
+    void refreshSession({ showLoading: true });
+  }, [refreshSession]);
+
+  useEffect(() => {
+    if (!user) return;
+    const timer = window.setInterval(
+      () => void refreshSession(),
+      TOKEN_REFRESH_INTERVAL_MS,
+    );
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void refreshSession();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [user, refreshSession]);
 
   return (
     <AuthContext.Provider

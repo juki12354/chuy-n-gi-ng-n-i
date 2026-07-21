@@ -8,11 +8,20 @@ export type BillingCycle = "monthly" | "yearly";
 export interface QuotaStatus {
   plan: PlanCode;
   label: string;
+  baseQuotaSeconds: number;
   quotaSeconds: number;
+  topUpGrantedSeconds: number;
+  topUpRemainingSeconds: number;
+  topUpNextExpiry?: string | null;
   usedSeconds: number;
   remainingSeconds: number;
   percentUsed: number;
   alertSeconds: number;
+  maxAlertSeconds: number;
+  planStartedAt?: string | null;
+  planExpiresAt?: string | null;
+  cancelAtPeriodEnd: boolean;
+  cancellationRequestedAt?: string | null;
   shouldAlert: boolean;
   isLimitReached: boolean;
   limits: {

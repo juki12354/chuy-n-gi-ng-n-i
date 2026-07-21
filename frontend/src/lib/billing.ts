@@ -4,22 +4,42 @@ const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ??
   "http://localhost:3001";
 
-export type OrderStatus = "pending" | "paid" | "failed" | "cancelled" | "expired";
-export type PaidPlanCode = Exclude<PlanCode, "free" | "business">;
+export type OrderStatus =
+  | "pending"
+  | "paid"
+  | "failed"
+  | "cancelled"
+  | "expired";
+export type PaidPlanCode = Exclude<PlanCode, "free">;
+export type BillingProductType = "subscription" | "top_up";
+export type TopUpCode =
+  | "topup_1h"
+  | "topup_3h"
+  | "topup_5h"
+  | "topup_10h"
+  | "topup_20h"
+  | "topup_50h"
+  | "topup_100h";
 
 export interface BillingOrder {
   id: string;
   userId: number;
-  plan: PaidPlanCode;
+  plan: PlanCode;
+  productType: BillingProductType;
+  productCode: PaidPlanCode | TopUpCode;
   label: string;
   billingCycle: BillingCycle;
   quotaSeconds: number;
+  validDays: number | null;
   amount: number;
   currency: string;
   status: OrderStatus;
   provider: string;
   providerOrderId?: string | null;
   paymentUrl?: string | null;
+  paymentCode?: string | null;
+  paymentQrCode?: string | null;
+  paymentLinkId?: string | null;
   createdAt: string;
   updatedAt: string;
   paidAt?: string | null;
@@ -48,7 +68,27 @@ export async function createCheckout(
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ plan, billingCycle, provider: "demo" }),
+    body: JSON.stringify({
+      plan,
+      billingCycle,
+      productType: "subscription",
+      productCode: plan,
+    }),
+  });
+  return readJson<CheckoutResponse>(res);
+}
+
+export async function createTopUpCheckout(
+  token: string,
+  productCode: TopUpCode,
+): Promise<CheckoutResponse> {
+  const res = await fetch(`${API_URL}/api/billing/checkout`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ productType: "top_up", productCode }),
   });
   return readJson<CheckoutResponse>(res);
 }
@@ -77,4 +117,24 @@ export async function confirmDemoPayment(
     body: JSON.stringify({ orderId }),
   });
   return readJson<{ order: BillingOrder; quota: QuotaStatus }>(res);
+}
+
+async function updateSubscription(
+  token: string,
+  action: "cancel" | "resume",
+): Promise<QuotaStatus> {
+  const res = await fetch(`${API_URL}/api/billing/subscription/${action}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await readJson<{ quota: QuotaStatus }>(res);
+  return data.quota;
+}
+
+export function cancelPlanAtPeriodEnd(token: string) {
+  return updateSubscription(token, "cancel");
+}
+
+export function resumeCancelledPlan(token: string) {
+  return updateSubscription(token, "resume");
 }

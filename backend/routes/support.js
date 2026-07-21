@@ -1,40 +1,10 @@
 require("dotenv").config();
 const express = require("express");
-const jwt = require("jsonwebtoken");
 const pool = require("../db");
+const { optionalAuth, requireAuth } = require("../middleware/auth");
+const { supportLimiter } = require("../middleware/security");
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret-in-production";
-
-function readBearerToken(req) {
-  const authHeader = req.headers.authorization || "";
-  if (!authHeader.startsWith("Bearer ")) return "";
-  return authHeader.slice("Bearer ".length).trim();
-}
-
-async function optionalAuth(req, res, next) {
-  const token = readBearerToken(req);
-  if (!token) return next();
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const { rows } = await pool.query(
-      "SELECT id, first_name, last_name, email, plan FROM users WHERE id = $1",
-      [decoded.id],
-    );
-    if (rows.length > 0) req.user = rows[0];
-    return next();
-  } catch {
-    return res.status(401).json({ error: "Token không hợp lệ hoặc đã hết hạn" });
-  }
-}
-
-async function requireAuth(req, res, next) {
-  await optionalAuth(req, res, () => {
-    if (!req.user) return res.status(401).json({ error: "Chưa đăng nhập" });
-    return next();
-  });
-}
 
 function normalizeTicket(row) {
   return {
@@ -78,7 +48,7 @@ router.get("/tickets", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/tickets", optionalAuth, async (req, res) => {
+router.post("/tickets", supportLimiter, optionalAuth, async (req, res) => {
   const message = String(req.body.message || "").trim();
   const category = String(req.body.category || "general").trim().slice(0, 60);
   const subject = String(req.body.subject || "Yêu cầu hỗ trợ Vbee")
@@ -102,8 +72,11 @@ router.post("/tickets", optionalAuth, async (req, res) => {
       ? req.body.metadata
       : {};
 
-  if (message.length < 2) {
+  if (message.length < 2 || message.length > 10_000) {
     return res.status(400).json({ error: "Vui lòng nhập nội dung cần hỗ trợ" });
+  }
+  if (JSON.stringify(metadata).length > 20_000) {
+    return res.status(400).json({ error: "Metadata hỗ trợ quá lớn" });
   }
 
   if (!req.user && !email) {
@@ -158,7 +131,7 @@ router.post("/tickets", optionalAuth, async (req, res) => {
   }
 });
 
-router.post("/tickets/:id/messages", requireAuth, async (req, res) => {
+router.post("/tickets/:id/messages", requireAuth, supportLimiter, async (req, res) => {
   const message = String(req.body.message || "").trim();
   const ticketId = Number(req.params.id);
 
@@ -166,7 +139,7 @@ router.post("/tickets/:id/messages", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Ticket không hợp lệ" });
   }
 
-  if (message.length < 2) {
+  if (message.length < 2 || message.length > 10_000) {
     return res.status(400).json({ error: "Vui lòng nhập nội dung tin nhắn" });
   }
 

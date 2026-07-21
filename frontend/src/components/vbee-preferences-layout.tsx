@@ -9,6 +9,7 @@ type AccountUsageCardProps = {
   refreshKey?: number;
   onQuotaChange?: (quota: QuotaStatus) => void;
   showAlert?: boolean;
+  showReferral?: boolean;
   compact?: boolean;
 };
 
@@ -17,6 +18,7 @@ export function VbeeAccountUsageCard({
   refreshKey,
   onQuotaChange,
   showAlert = true,
+  showReferral = true,
   compact = false,
 }: AccountUsageCardProps) {
   return (
@@ -42,17 +44,19 @@ export function VbeeAccountUsageCard({
         />
       </div>
 
-      <Link
-        to="/referral"
-        className={`flex items-center rounded-xl border border-[#e5dfef] bg-[#fbf8ef] transition hover:border-[#ffcb05] ${compact ? "gap-2.5 px-3 py-3.5" : "gap-3 px-4 py-5"}`}
-      >
-        <Gift className={`text-[#21104a] ${compact ? "h-5 w-5" : "h-7 w-7"}`} />
-        <p className={`font-black text-[#21104a] ${compact ? "text-xs leading-4" : "text-sm leading-5"}`}>
-          GIỚI THIỆU BẠN BÈ
-          <br />
-          NHẬN 100 PHÚT MIỄN PHÍ
-        </p>
-      </Link>
+      {showReferral && (
+        <Link
+          to="/referral"
+          className={`flex items-center rounded-xl border border-[#e5dfef] bg-[#fbf8ef] transition hover:border-[#ffcb05] ${compact ? "gap-2.5 px-3 py-3.5" : "gap-3 px-4 py-5"}`}
+        >
+          <Gift className={`text-[#21104a] ${compact ? "h-5 w-5" : "h-7 w-7"}`} />
+          <p className={`font-black text-[#21104a] ${compact ? "text-xs leading-4" : "text-sm leading-5"}`}>
+            GIỚI THIỆU BẠN BÈ
+            <br />
+            NHẬN 100 PHÚT MIỄN PHÍ
+          </p>
+        </Link>
+      )}
     </div>
   );
 }

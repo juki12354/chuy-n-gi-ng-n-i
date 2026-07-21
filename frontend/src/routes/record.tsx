@@ -57,6 +57,7 @@ type RecordStatus =
   | "paused"
   | "recorded"
   | "processing"
+  | "queued"
   | "done"
   | "error";
 
@@ -85,6 +86,7 @@ function getRecorderLabel(status: RecordStatus) {
   if (status === "paused") return "PAUSED";
   if (status === "recorded") return "RECORDED";
   if (status === "processing") return "PROCESSING";
+  if (status === "queued") return "QUEUED";
   if (status === "done") return "TRANSCRIBED";
   if (status === "error") return "ERROR";
   return "READY WHEN YOU ARE";
@@ -126,6 +128,11 @@ function RecordPage() {
   const [audioLevel, setAudioLevel] = useState(0);
   const [audioWarning, setAudioWarning] = useState("");
   const [recordingNotice, setRecordingNotice] = useState("");
+  const [queuedJobId, setQueuedJobId] = useState<number | null>(null);
+  const [jobEstimate, setJobEstimate] = useState({
+    queuePosition: 0,
+    remainingSeconds: 0,
+  });
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -188,6 +195,109 @@ function RecordPage() {
   useEffect(() => {
     void checkMicrophoneStatus();
   }, []);
+
+  useEffect(() => {
+    if (!queuedJobId || !token || (status !== "queued" && status !== "processing")) {
+      return;
+    }
+
+    let cancelled = false;
+    async function loadJob() {
+      try {
+        const res = await fetch(`${API_URL}/api/transcribe/jobs/${queuedJobId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok || cancelled) return;
+        const job = (await res.json()) as {
+          status: "queued" | "processing" | "completed" | "failed" | "cancelled";
+          error_message?: string | null;
+          queue_position?: number;
+          estimated_remaining_seconds?: number;
+          duration?: number | null;
+          text?: string;
+          words?: Word[];
+          source_language?: string | null;
+          translated_text?: string | null;
+          translation_target_language?: string | null;
+          translation_provider?: string | null;
+          translation_error?: string | null;
+        };
+
+        if (job.status === "queued" || job.status === "processing") {
+          setJobEstimate({
+            queuePosition: Number(job.queue_position || 0),
+            remainingSeconds: Number(job.estimated_remaining_seconds || 0),
+          });
+          setStatus(job.status);
+          return;
+        }
+        if (job.status === "cancelled") {
+          setQueuedJobId(null);
+          setRecordingNotice("Đã hủy job. Bản ghi vẫn sẵn sàng để bạn xử lý lại.");
+          setStatus("recorded");
+          return;
+        }
+        if (job.status === "failed") {
+          setQueuedJobId(null);
+          setError(job.error_message || "Chuyển đổi thất bại");
+          setStatus("error");
+          return;
+        }
+
+        setQueuedJobId(null);
+        setTranscription(job.text ?? "");
+        setDuration(job.duration ?? null);
+        setWords(job.words ?? []);
+        setTranslation(
+          job.translated_text
+            ? {
+                text: job.translated_text,
+                sourceLanguage: job.source_language ?? "auto",
+                targetLanguage: job.translation_target_language ?? "vi",
+                provider: job.translation_provider ?? "unknown",
+              }
+            : null,
+        );
+        setTranslationError(job.translation_error ?? "");
+        setQuotaRefreshKey((key) => key + 1);
+        setStatus("done");
+      } catch {
+        // Giữ job trong trạng thái hiện tại; lần poll tiếp theo sẽ thử lại.
+      }
+    }
+
+    void loadJob();
+    const interval = window.setInterval(() => void loadJob(), 3500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [queuedJobId, status, token]);
+
+  async function cancelQueuedJob() {
+    if (!queuedJobId || !token) return;
+    try {
+      const response = await fetch(
+        `${API_URL}/api/transcribe/jobs/${queuedJobId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "Không hủy được job");
+      setQueuedJobId(null);
+      setJobEstimate({ queuePosition: 0, remainingSeconds: 0 });
+      setRecordingNotice("Đã gửi yêu cầu hủy job xử lý.");
+      setStatus("recorded");
+    } catch (cancelError) {
+      setError(
+        cancelError instanceof Error
+          ? cancelError.message
+          : "Không hủy được job xử lý.",
+      );
+    }
+  }
 
   async function loadMicrophoneLabel() {
     try {
@@ -498,14 +608,10 @@ function RecordPage() {
         body: formData,
       });
       const data = (await res.json()) as {
-        text?: string;
-        duration?: number;
+        jobId?: number | string;
+        status?: "queued" | "processing";
         error?: string;
-        words?: Word[];
         quota?: QuotaStatus;
-        processingSeconds?: number;
-        translation?: TranslationResult | null;
-        translationError?: string;
       };
       if (!res.ok) {
         if (data.quota) setQuota(data.quota);
@@ -513,14 +619,15 @@ function RecordPage() {
         setStatus("error");
         return;
       }
-      setTranscription(data.text ?? "");
-      setTranslation(data.translation ?? null);
-      setTranslationError(data.translationError ?? "");
-      setDuration(data.duration ?? null);
-      setWords(data.words ?? []);
       if (data.quota) setQuota(data.quota);
-      setQuotaRefreshKey((key) => key + 1);
-      setStatus("done");
+      const jobId = Number(data.jobId);
+      if (!Number.isFinite(jobId)) {
+        setError("Server chưa trả về job xử lý.");
+        setStatus("error");
+        return;
+      }
+      setQueuedJobId(jobId);
+      setStatus(data.status === "processing" ? "processing" : "queued");
     } catch {
       setError("Không thể kết nối đến server");
       setStatus("error");
@@ -619,6 +726,8 @@ function RecordPage() {
     setTranscription("");
     setTranslation(null);
     setTranslationError("");
+    setQueuedJobId(null);
+    setJobEstimate({ queuePosition: 0, remainingSeconds: 0 });
     setError("");
     setRecordingNotice("");
     setDuration(null);
@@ -656,12 +765,36 @@ function RecordPage() {
 
             <div className="order-1 min-w-0 xl:order-2">
               <RecorderPanel status={status} recordTime={recordTime} />
+              {status === "idle" && (
+                <div className="mt-2 flex flex-col items-center gap-2 text-center">
+                  <button
+                    onClick={() => void startRecording()}
+                    disabled={
+                      quota?.isLimitReached ||
+                      micStatus === "blocked" ||
+                      micStatus === "unsupported"
+                    }
+                    className="inline-flex items-center gap-3 rounded-full bg-primary px-6 py-3 text-base font-black text-primary-foreground shadow-glow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Mic className="h-6 w-6" />
+                    {quota?.isLimitReached
+                      ? "Upgrade to Record"
+                      : micStatus === "blocked"
+                        ? "Microphone bị chặn"
+                        : "Start Recording"}
+                  </button>
+                  <p className="max-w-xl text-base leading-7 text-muted-foreground">
+                    {quota?.isLimitReached
+                      ? "Free đã hết thời lượng. Nâng cấp Premium để ghi âm tiếp."
+                      : "Microphone access is ready - you're ready to record."}
+                  </p>
+                </div>
+              )}
             </div>
 
-            <aside className="order-3 min-w-0 xl:order-3 xl:max-w-[360px] xl:justify-self-end">
+            <aside className="order-3 min-w-0 xl:order-3 xl:max-w-[360px] xl:-translate-y-4 xl:justify-self-end">
               <VbeeAccountUsageCard
                 firstName={user.firstName}
-                compact
                 showAlert={false}
                 refreshKey={quotaRefreshKey}
                 onQuotaChange={setQuota}
@@ -675,35 +808,7 @@ function RecordPage() {
             </p>
           )}
 
-          <div className="mt-8 flex flex-col items-center gap-4 text-center">
-            {status === "idle" && (
-              <>
-                <div className="flex items-center justify-center">
-                  <button
-                    onClick={() => void startRecording()}
-                    disabled={
-                      quota?.isLimitReached ||
-                      micStatus === "blocked" ||
-                      micStatus === "unsupported"
-                    }
-                className="inline-flex items-center gap-3 rounded-full bg-primary px-6 py-3 text-base font-black text-primary-foreground shadow-glow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Mic className="h-6 w-6" />
-                    {quota?.isLimitReached
-                      ? "Upgrade to Record"
-                      : micStatus === "blocked"
-                        ? "Microphone bị chặn"
-                        : "Start Recording"}
-                  </button>
-                </div>
-                <p className="max-w-xl text-base leading-7 text-muted-foreground">
-                  {quota?.isLimitReached
-                    ? "Free đã hết thời lượng. Nâng cấp Premium để ghi âm tiếp."
-                    : "Microphone access is ready - you're ready to record."}
-                </p>
-              </>
-            )}
-
+          <div className="mt-0 flex flex-col items-center gap-2 text-center">
             {status === "requesting" && (
               <p className="text-lg font-semibold text-muted-foreground">
                 Đang yêu cầu quyền microphone...
@@ -767,11 +872,57 @@ function RecordPage() {
               <div className="rounded-lg border border-border bg-white p-5 text-center shadow-soft">
                 <span className="mx-auto block h-10 w-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
                 <p className="mt-3 font-bold text-primary">
-                  Đang chuyển giọng nói thành văn bản...
+                  Đang gửi bản ghi vào hàng đợi...
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Ước tính khoảng {formatTime(getProcessingEstimate(recordTime))}. Vui lòng giữ trang này trong lúc xử lý.
+                  File được lưu xong sẽ tiếp tục xử lý nền. Bạn không cần giữ trang này sau khi nhận trạng thái Đang chờ.
                 </p>
+                {jobEstimate.remainingSeconds > 0 && (
+                  <p className="mt-2 text-xs font-bold text-primary">
+                    Dự kiến còn {formatTime(jobEstimate.remainingSeconds)}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void cancelQueuedJob()}
+                  className="mt-3 rounded-full border border-border px-4 py-2 text-xs font-black text-primary transition hover:bg-primary/5"
+                >
+                  Hủy xử lý
+                </button>
+              </div>
+            )}
+
+            {status === "queued" && (
+              <div className="rounded-lg border border-primary/25 bg-primary/5 p-5 text-center shadow-soft">
+                <span className="mx-auto block h-10 w-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+                <p className="mt-3 font-bold text-primary">
+                  Bản ghi đã được xếp hàng xử lý
+                </p>
+                <p className="mx-auto mt-1 max-w-lg text-sm leading-6 text-muted-foreground">
+                  Bạn có thể rời trang hoặc tiếp tục làm việc. Transcript sẽ tự cập nhật khi hoàn tất.
+                </p>
+                <p className="mt-2 text-xs font-bold text-primary">
+                  {jobEstimate.queuePosition > 0
+                    ? `Vị trí hàng đợi: ${jobEstimate.queuePosition}. `
+                    : ""}
+                  {jobEstimate.remainingSeconds > 0
+                    ? `Dự kiến còn ${formatTime(jobEstimate.remainingSeconds)}.`
+                    : "Đang tính thời gian chờ."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void cancelQueuedJob()}
+                  className="mt-3 rounded-full border border-primary/30 px-4 py-2 text-xs font-black text-primary transition hover:bg-primary/10"
+                >
+                  Hủy xử lý
+                </button>
+                <Link
+                  to="/history"
+                  className="mt-4 inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
+                >
+                  Xem tiến độ trong Lịch sử
+                  <ChevronRight className="h-4 w-4" />
+                </Link>
               </div>
             )}
 

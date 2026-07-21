@@ -29,6 +29,7 @@ if (hasGoogleOAuth) {
         const user = {
           googleId: profile.id,
           email: profile.emails?.[0]?.value || '',
+          emailVerified: profile.emails?.[0]?.verified !== false,
           firstName: profile.name?.givenName || '',
           lastName: profile.name?.familyName || '',
           photo: profile.photos?.[0]?.value || '',

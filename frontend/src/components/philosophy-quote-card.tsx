@@ -1,4 +1,3 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const QUOTE_ROTATION_MS = 5000;
@@ -32,6 +31,62 @@ const PHILOSOPHY_QUOTES = [
     text: "Tương lai phụ thuộc vào những gì bạn làm hôm nay.",
     author: "MAHATMA GANDHI",
   },
+  {
+    text: "Điều duy nhất tôi biết là tôi không biết gì cả.",
+    author: "SOCRATES",
+  },
+  {
+    text: "Bạn có quyền làm chủ tâm trí mình, không phải những sự việc bên ngoài.",
+    author: "MARCUS AURELIUS",
+  },
+  {
+    text: "Không phải sự việc làm con người phiền lòng, mà là cách họ nhìn nhận sự việc.",
+    author: "EPICTETUS",
+  },
+  {
+    text: "Lạc quan là niềm tin dẫn tới thành tựu. Không thể làm được gì nếu thiếu hy vọng và tự tin.",
+    author: "HELEN KELLER",
+  },
+  {
+    text: "Thời điểm luôn luôn đúng để làm điều đúng đắn.",
+    author: "MARTIN LUTHER KING JR.",
+  },
+  {
+    text: "Biết điều cần phải làm sẽ xóa đi nỗi sợ hãi.",
+    author: "ROSA PARKS",
+  },
+  {
+    text: "Tôi không thất bại. Tôi chỉ tìm ra những cách chưa hiệu quả.",
+    author: "THOMAS EDISON",
+  },
+  {
+    text: "Đầu tư vào tri thức luôn mang lại lợi ích tốt nhất.",
+    author: "BENJAMIN FRANKLIN",
+  },
+  {
+    text: "Nơi nào có hy vọng, nơi đó có sự sống.",
+    author: "ANNE FRANK",
+  },
+  {
+    text: "Mọi người có thể quên điều bạn nói, nhưng họ sẽ nhớ cảm giác bạn mang lại cho họ.",
+    author: "MAYA ANGELOU",
+  },
+  {
+    text: "Cách tốt nhất để tìm thấy chính mình là hết lòng phụng sự người khác.",
+    author: "MAHATMA GANDHI",
+  },
+  {
+    text: "Lấy đại nghĩa để thắng hung tàn, lấy chí nhân để thay cường bạo.",
+    author: "NGUYỄN TRÃI",
+  },
+  {
+    text: "Chữ tâm kia mới bằng ba chữ tài.",
+    author: "NGUYỄN DU",
+  },
+  {
+    text: "Không có con đường dẫn đến hạnh phúc. Hạnh phúc chính là con đường.",
+    author: "THÍCH NHẤT HẠNH",
+  },
 ];
 
 export function PhilosophyQuoteCard({ compact = false }: { compact?: boolean }) {
@@ -46,24 +101,10 @@ export function PhilosophyQuoteCard({ compact = false }: { compact?: boolean }) 
     return () => window.clearInterval(timer);
   }, []);
 
-  function move(step: number) {
-    setActiveIndex((current) => {
-      const next = current + step;
-      if (next < 0) return PHILOSOPHY_QUOTES.length - 1;
-      if (next >= PHILOSOPHY_QUOTES.length) return 0;
-      return next;
-    });
-  }
-
   return (
     <div className="rounded-lg border border-border bg-white p-4 shadow-soft">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start">
         <p className="text-4xl font-black leading-none text-[#ffcb05]">“</p>
-        {!compact && (
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-black text-primary">
-            {activeIndex + 1}/{PHILOSOPHY_QUOTES.length}
-          </span>
-        )}
       </div>
 
       <p
@@ -73,59 +114,13 @@ export function PhilosophyQuoteCard({ compact = false }: { compact?: boolean }) 
         {quote.text}
       </p>
 
-      <div className={`flex items-center justify-between gap-3 ${compact ? "mt-2.5" : "mt-3"}`}>
+      <div className={compact ? "mt-2.5" : "mt-3"}>
         <p
           key={quote.author}
           className="animate-in fade-in duration-500 text-sm font-black text-[#21104a]"
         >
           {quote.author}
         </p>
-        {!compact && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => move(-1)}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background/50 text-primary transition hover:border-primary hover:bg-primary/10"
-              aria-label="Câu trước"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => move(1)}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background/50 text-primary transition hover:border-primary hover:bg-primary/10"
-              aria-label="Câu tiếp theo"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-      </div>
-
-      {!compact && (
-        <div className="mt-4 flex flex-wrap gap-1.5">
-          {PHILOSOPHY_QUOTES.map((item, index) => (
-            <button
-              key={item.text}
-              type="button"
-              onClick={() => setActiveIndex(index)}
-              className={`h-1.5 rounded-full transition ${
-                index === activeIndex ? "w-6 bg-primary" : "w-2 bg-primary/25"
-              }`}
-              aria-label={`Chọn triết lý ${index + 1}`}
-            />
-          ))}
-        </div>
-      )}
-
-      <div className={`${compact ? "mt-2.5" : "mt-3"} h-1 overflow-hidden rounded-full bg-primary/10`}>
-        <div
-          key={activeIndex}
-          className="h-full rounded-full bg-primary"
-          style={{
-            animation: `quote-progress ${QUOTE_ROTATION_MS}ms linear forwards`,
-          }}
-        />
       </div>
     </div>
   );

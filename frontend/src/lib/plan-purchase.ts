@@ -3,7 +3,7 @@ import type { BillingCycle, PlanCode } from "@/lib/quota";
 const PENDING_PLAN_PURCHASE_KEY = "pending_plan_purchase";
 const MAX_PENDING_AGE_MS = 30 * 60 * 1000;
 
-export type PurchasablePlanCode = Exclude<PlanCode, "free" | "business">;
+export type PurchasablePlanCode = Exclude<PlanCode, "free">;
 
 export interface PendingPlanPurchase {
   plan: PurchasablePlanCode;
@@ -13,7 +13,7 @@ export interface PendingPlanPurchase {
 }
 
 function isPurchasablePlan(plan: unknown): plan is PurchasablePlanCode {
-  return plan === "standard" || plan === "special";
+  return plan === "standard" || plan === "special" || plan === "business";
 }
 
 function isBillingCycle(value: unknown): value is BillingCycle {

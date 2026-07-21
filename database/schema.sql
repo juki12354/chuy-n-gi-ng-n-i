@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS transcriptions (
   translated_text TEXT,
   translation_target_language VARCHAR(20),
   translation_provider VARCHAR(40),
+  translation_error TEXT,
   created_at     TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

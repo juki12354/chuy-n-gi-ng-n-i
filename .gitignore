@@ -16,8 +16,13 @@ dist-ssr
 **/.nitro/**
 **/.output/**
 backend/uploads/
+backend/upload-staging/
+backend/secrets/
+backend/youtube-cookies.txt
 uploads/
 *.local
+__pycache__/
+*.pyc
 .env
 .env.*
 !.env.example

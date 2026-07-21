@@ -17,14 +17,15 @@ import {
   Home,
   Info,
   Languages,
-  Link2,
   ListChecks,
   Mic,
   RotateCcw,
+  ShieldCheck,
   SlidersHorizontal,
   Upload,
   UploadCloud,
   X,
+  Youtube,
   Zap,
 } from "lucide-react";
 import { Document, Packer, Paragraph, TextRun } from "docx";
@@ -70,12 +71,33 @@ interface HistoryItem {
   source_language?: string | null;
   translated_text?: string | null;
   translation_target_language?: string | null;
+  translation_error?: string | null;
+  status?: "queued" | "processing" | "completed" | "failed" | "cancelled";
+  progress?: number;
+  error_message?: string | null;
+  job_id?: number | null;
   created_at: string;
 }
 
-type UploadStatus = "idle" | "uploading" | "done" | "error";
+type UploadStatus =
+  | "idle"
+  | "uploading"
+  | "queued"
+  | "done"
+  | "error"
+  | "cancelled";
 type UploadMode = "single" | "multi" | "link";
 type AudioMode = "speech" | "song";
+type YoutubeMetadata = {
+  url: string;
+  videoId: string;
+  title: string;
+  filename: string;
+  durationSeconds: number;
+  approximateBytes: number | null;
+  thumbnail: string | null;
+  channel: string;
+};
 type ActionDialogState = {
   title: string;
   description: string;
@@ -167,6 +189,10 @@ function UploadPage() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [uploadMode, setUploadMode] = useState<UploadMode>("single");
   const [videoLink, setVideoLink] = useState("");
+  const [youtubeMetadata, setYoutubeMetadata] =
+    useState<YoutubeMetadata | null>(null);
+  const [linkRightsAccepted, setLinkRightsAccepted] = useState(false);
+  const [linkMetadataLoading, setLinkMetadataLoading] = useState(false);
   const [folderOpen, setFolderOpen] = useState(false);
   const [folderName, setFolderName] = useState("Dự án mới");
   const [activeFolder, setActiveFolder] = useState("Dự án mới");
@@ -176,6 +202,11 @@ function UploadPage() {
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
   const [quotaRefreshKey, setQuotaRefreshKey] = useState(0);
   const [expectedDuration, setExpectedDuration] = useState<number | null>(null);
+  const [queuedJob, setQueuedJob] = useState<{
+    id: number;
+    queuePosition: number;
+    estimatedRemainingSeconds: number | null;
+  } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -194,12 +225,29 @@ function UploadPage() {
 
   useEffect(() => {
     if (!user || !token) return;
-    void fetch(`${API_URL}/api/transcribe/history`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => (r.ok ? (r.json() as Promise<HistoryItem[]>) : []))
-      .then((data) => setHistory(data.slice(0, 4)))
-      .catch(() => setHistory([]));
+    let active = true;
+    const loadHistory = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/transcribe/history`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const data = response.ok
+          ? ((await response.json()) as HistoryItem[])
+          : [];
+        if (active) setHistory(data.slice(0, 4));
+      } catch {
+        // Keep the current list when a background refresh fails.
+      }
+    };
+    void loadHistory();
+    const interval = window.setInterval(() => void loadHistory(), 8_000);
+    window.addEventListener("focus", loadHistory);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", loadHistory);
+    };
   }, [user, token]);
 
   useEffect(() => {
@@ -242,8 +290,12 @@ function UploadPage() {
     return historySeconds + (duration ?? 0);
   }, [duration, history]);
 
+  const hasSelectedSource = Boolean(uploadFile || youtubeMetadata);
+  const selectedFilename = uploadFile?.name ?? youtubeMetadata?.filename ?? "transcript";
+  const selectedFileSize = uploadFile?.size ?? youtubeMetadata?.approximateBytes ?? undefined;
+
   const pendingUploadSeconds =
-    uploadFile && uploadStatus !== "done" && expectedDuration
+    hasSelectedSource && uploadStatus !== "done" && expectedDuration
       ? Math.ceil(expectedDuration)
       : 0;
   const projectedRemainingSeconds = quota
@@ -311,6 +363,7 @@ function UploadPage() {
       }
     }
     setUploadFile(file);
+    setYoutubeMetadata(null);
     setExpectedDuration(duration);
     setUploadStatus("idle");
     setUploadError("");
@@ -329,39 +382,61 @@ function UploadPage() {
   }
 
   async function handleUpload() {
-    if (!uploadFile) return;
+    if (!uploadFile && !youtubeMetadata) return;
     setUploadStatus("uploading");
     setUploadError("");
     try {
-      const formData = new FormData();
-      formData.append("audio", uploadFile);
-      formData.append("speakerLabels", String(speakerLabels));
-      formData.append("source", "upload");
-      formData.append("audioMode", audioMode);
-      formData.append("language", transcriptionLanguage);
-      formData.append("translateTo", translateTo);
-      if (expectedDuration) {
-        formData.append(
-          "expectedDuration",
-          String(Math.ceil(expectedDuration)),
-        );
+      let res: Response;
+      if (uploadFile) {
+        const formData = new FormData();
+        formData.append("audio", uploadFile);
+        formData.append("speakerLabels", String(speakerLabels));
+        formData.append("source", "upload");
+        formData.append("audioMode", audioMode);
+        formData.append("language", transcriptionLanguage);
+        formData.append("translateTo", translateTo);
+        if (expectedDuration) {
+          formData.append(
+            "expectedDuration",
+            String(Math.ceil(expectedDuration)),
+          );
+        }
+        res = await fetch(`${API_URL}/api/transcribe`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+      } else {
+        res = await fetch(`${API_URL}/api/transcribe/url`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            url: youtubeMetadata!.url,
+            rightsAccepted: linkRightsAccepted,
+            speakerLabels,
+            audioMode,
+            language: transcriptionLanguage,
+            translateTo,
+          }),
+        });
       }
-      const res = await fetch(`${API_URL}/api/transcribe`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
       const data = (await res.json()) as {
         id?: number;
-        text?: string;
-        duration?: number;
+        jobId?: number;
+        status?: "queued" | "processing" | "completed" | "failed";
+        progress?: number;
+        queuePosition?: number;
+        estimatedRemainingSeconds?: number | null;
+        expectedDurationSeconds?: number;
         error?: string;
-        words?: Word[];
         filename?: string;
+        fileSize?: number;
         createdAt?: string;
         quota?: QuotaStatus;
-        translation?: TranslationResult | null;
-        translationError?: string;
+        message?: string;
       };
       if (!res.ok) {
         if (data.quota) setQuota(data.quota);
@@ -369,14 +444,14 @@ function UploadPage() {
         setUploadStatus("error");
         return;
       }
-      setTranscription(data.text ?? "");
-      setTranslation(data.translation ?? null);
-      setTranslationError(data.translationError ?? "");
-      setDuration(data.duration ?? null);
-      setWords(data.words ?? []);
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      setAudioUrl(URL.createObjectURL(uploadFile));
-      setUploadStatus("done");
+      setUploadStatus("queued");
+      if (data.jobId) {
+        setQueuedJob({
+          id: data.jobId,
+          queuePosition: data.queuePosition || 1,
+          estimatedRemainingSeconds: data.estimatedRemainingSeconds ?? null,
+        });
+      }
       setQuotaRefreshKey((key) => key + 1);
       if (data.quota) setQuota(data.quota);
       if (data.id) {
@@ -384,14 +459,13 @@ function UploadPage() {
           [
             {
               id: data.id!,
-              filename: data.filename ?? uploadFile.name,
-              file_size: uploadFile.size,
-              duration: data.duration ?? null,
-              text: data.text ?? "",
-              translated_text: data.translation?.text ?? null,
-              translation_target_language:
-                data.translation?.targetLanguage ?? null,
-              source_language: data.translation?.sourceLanguage ?? null,
+              filename: data.filename ?? selectedFilename,
+              file_size: data.fileSize ?? selectedFileSize,
+              duration: data.expectedDurationSeconds ?? expectedDuration,
+              text: "",
+              status: data.status ?? "queued",
+              progress: data.progress ?? 0,
+              job_id: data.jobId ?? null,
               created_at: data.createdAt ?? new Date().toISOString(),
             },
             ...prev.filter((item) => item.id !== data.id),
@@ -401,6 +475,31 @@ function UploadPage() {
     } catch {
       setUploadError("Không thể kết nối đến server");
       setUploadStatus("error");
+    }
+  }
+
+  async function handleCancelQueuedJob() {
+    if (!queuedJob || !token) return;
+    try {
+      const response = await fetch(
+        `${API_URL}/api/transcribe/jobs/${queuedJob.id}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "Không hủy được job");
+      setQueuedJob(null);
+      setUploadStatus("idle");
+      setUploadError("");
+      setQuotaRefreshKey((key) => key + 1);
+    } catch (cancelError) {
+      setUploadError(
+        cancelError instanceof Error
+          ? cancelError.message
+          : "Không hủy được job xử lý.",
+      );
     }
   }
 
@@ -425,7 +524,7 @@ function UploadPage() {
           translated,
         ]
       : text.split("\n");
-    const baseName = uploadFile?.name.replace(/\.[^.]+$/, "") ?? "transcript";
+    const baseName = selectedFilename.replace(/\.[^.]+$/, "") || "transcript";
     const doc = new Document({
       sections: [
         {
@@ -461,7 +560,7 @@ function UploadPage() {
           translated,
         ].join("\n")
       : text;
-    const baseName = uploadFile?.name.replace(/\.[^.]+$/, "") ?? "transcript";
+    const baseName = selectedFilename.replace(/\.[^.]+$/, "") || "transcript";
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -476,6 +575,10 @@ function UploadPage() {
     setAudioUrl(null);
     setWords([]);
     setUploadFile(null);
+    setYoutubeMetadata(null);
+    setVideoLink("");
+    setLinkRightsAccepted(false);
+    setLinkMetadataLoading(false);
     setUploadStatus("idle");
     setTranscription("");
     setTranslation(null);
@@ -484,6 +587,7 @@ function UploadPage() {
     setUploadError("");
     setDuration(null);
     setExpectedDuration(null);
+    setQueuedJob(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -495,21 +599,62 @@ function UploadPage() {
     setFolderName("Dự án mới");
   }
 
-  function handleVideoLink() {
+  async function handleVideoLink() {
     if (!videoLink.trim()) {
-      setActionDialog({
-        title: "Link video",
-        description: "Hãy dán link video/audio công khai trước khi gửi.",
-      });
+      setUploadError("Hãy dán link video YouTube trước khi tiếp tục.");
       return;
     }
-    setActionDialog({
-      title: "Đã nhận link video",
-      description:
-        "Vbee hiện hỗ trợ xử lý file tải lên trực tiếp. Với video link công khai, hệ thống sẽ cần kết nối thêm bước lấy audio từ URL trước khi chuyển thành văn bản.",
-      ctaLabel: "Chọn file thay thế",
-      to: "choose-file",
-    });
+    if (!linkRightsAccepted) {
+      setUploadError(
+        "Hãy xác nhận bạn sở hữu video hoặc được phép sử dụng nội dung này.",
+      );
+      return;
+    }
+    if (quota?.isLimitReached) {
+      setUploadError("Tài khoản đã hết thời lượng. Vui lòng nâng cấp gói cước.");
+      return;
+    }
+
+    setLinkMetadataLoading(true);
+    setUploadError("");
+    try {
+      const response = await fetch(`${API_URL}/api/transcribe/url/metadata`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          url: videoLink.trim(),
+          rightsAccepted: linkRightsAccepted,
+        }),
+      });
+      const data = (await response.json()) as {
+        metadata?: YoutubeMetadata;
+        quota?: QuotaStatus;
+        error?: string;
+      };
+      if (!response.ok || !data.metadata) {
+        if (data.quota) setQuota(data.quota);
+        throw new Error(data.error || "Không đọc được video YouTube.");
+      }
+      setYoutubeMetadata(data.metadata);
+      setVideoLink(data.metadata.url);
+      setExpectedDuration(data.metadata.durationSeconds);
+      setUploadStatus("idle");
+      setTranscription("");
+      setTranslation(null);
+      setTranslationError("");
+      setDuration(null);
+      setWords([]);
+      if (data.quota) setQuota(data.quota);
+    } catch (error) {
+      setUploadError(
+        error instanceof Error ? error.message : "Không đọc được video YouTube.",
+      );
+    } finally {
+      setLinkMetadataLoading(false);
+    }
   }
 
   if (isLoading) {
@@ -551,7 +696,7 @@ function UploadPage() {
               className="mb-3 flex items-center justify-center rounded-md border border-border bg-card/75 px-4 py-2 text-sm font-bold text-foreground/85 shadow-soft transition hover:border-primary/45 hover:bg-primary/5 hover:text-primary"
             >
               <Home className="mr-2 h-4 w-4 text-primary" />
-              Home
+              Không gian làm việc
             </Link>
 
             <div className="grid grid-cols-[1fr_1fr_44px] gap-2 sm:flex">
@@ -591,7 +736,7 @@ function UploadPage() {
             </div>
 
             <UploadWorkflowSteps
-              hasFile={Boolean(uploadFile)}
+              hasFile={hasSelectedSource}
               status={uploadStatus}
             />
 
@@ -610,12 +755,12 @@ function UploadPage() {
                   </div>
                 </div>
                 <div className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-                  {history.length + (uploadFile ? 1 : 0)} items
+                  {history.length + (hasSelectedSource ? 1 : 0)} items
                 </div>
               </div>
             </div>
 
-            {!uploadFile && (
+            {!hasSelectedSource && (
               <div className="m-4 space-y-4">
                 <section className="rounded-xl border border-border bg-[#fbf8ef] p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -641,6 +786,10 @@ function UploadPage() {
                   <VideoLinkPanel
                     videoLink={videoLink}
                     setVideoLink={setVideoLink}
+                    rightsAccepted={linkRightsAccepted}
+                    setRightsAccepted={setLinkRightsAccepted}
+                    loading={linkMetadataLoading}
+                    error={uploadError}
                     onSubmit={handleVideoLink}
                     onChooseFile={() => fileInputRef.current?.click()}
                   />
@@ -666,10 +815,10 @@ function UploadPage() {
               </div>
             )}
 
-            {uploadFile && (
+            {hasSelectedSource && (
               <VbeeFileCard
-                filename={uploadFile.name}
-                fileSize={uploadFile.size}
+                filename={selectedFilename}
+                fileSize={selectedFileSize}
                 status={uploadStatus}
                 duration={duration ?? expectedDuration}
                 date={new Date().toISOString()}
@@ -818,6 +967,42 @@ function UploadPage() {
 
                 {uploadStatus === "uploading" && <ProcessingPanel translateTo={translateTo} />}
 
+                {uploadStatus === "queued" && (
+                  <div className="space-y-3 rounded-xl border border-primary/25 bg-primary/5 p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 h-5 w-5 shrink-0 rounded-full border-2 border-primary/35 border-t-primary animate-spin" />
+                      <div>
+                        <p className="text-sm font-black text-primary">
+                          File đã được đưa vào hàng đợi xử lý
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                          Bạn có thể rời trang hoặc tiếp tục tải file khác. Vbee sẽ xử lý nền và cập nhật transcript trong Lịch sử.
+                        </p>
+                        <p className="mt-2 text-xs font-bold text-primary">
+                          Vị trí hàng đợi: {queuedJob?.queuePosition || 1}.
+                          {queuedJob?.estimatedRemainingSeconds
+                            ? ` Dự kiến còn ${formatQuotaTime(queuedJob.estimatedRemainingSeconds)}.`
+                            : " Đang tính thời gian chờ."}
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      to="/history"
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
+                    >
+                      Xem tiến độ trong Lịch sử
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => void handleCancelQueuedJob()}
+                      className="inline-flex w-full items-center justify-center rounded-xl border border-primary/25 px-4 py-2.5 text-xs font-black text-primary transition hover:bg-primary/10"
+                    >
+                      Hủy xử lý
+                    </button>
+                  </div>
+                )}
+
                 {uploadStatus === "error" && (
                   <div className="space-y-3">
                     <div className="rounded-xl border border-destructive/25 bg-destructive/10 p-4 text-sm text-destructive">
@@ -934,15 +1119,24 @@ function UploadPage() {
                 key={item.id}
                 filename={item.filename}
                 fileSize={item.file_size}
-                status="done"
+                status={
+                  item.status === "completed" || !item.status
+                    ? "done"
+                    : item.status === "processing"
+                      ? "uploading"
+                      : item.status === "failed"
+                        ? "error"
+                        : item.status
+                }
                 duration={item.duration}
                 date={item.created_at}
+                error={item.error_message || item.translation_error || undefined}
                 compact
               />
             ))}
 
             <div className="border-t border-border bg-[#fbf8ef] px-5 py-3 text-center text-sm font-black text-primary">
-              {history.length + (uploadFile ? 1 : 0)} items,{" "}
+              {history.length + (hasSelectedSource ? 1 : 0)} items,{" "}
               {formatDuration(totalDuration)}
             </div>
           </div>
@@ -1103,11 +1297,19 @@ function FileDropzone({
 function VideoLinkPanel({
   videoLink,
   setVideoLink,
+  rightsAccepted,
+  setRightsAccepted,
+  loading,
+  error,
   onSubmit,
   onChooseFile,
 }: {
   videoLink: string;
   setVideoLink: (value: string) => void;
+  rightsAccepted: boolean;
+  setRightsAccepted: (value: boolean) => void;
+  loading: boolean;
+  error: string;
   onSubmit: () => void;
   onChooseFile: () => void;
 }) {
@@ -1115,12 +1317,12 @@ function VideoLinkPanel({
     <section className="rounded-xl border border-border bg-white p-5">
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Link2 className="h-5 w-5" />
+          <Youtube className="h-5 w-5" />
         </span>
         <div>
-          <p className="text-sm font-black">Link video công khai</p>
+          <p className="text-sm font-black">Link video YouTube</p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Dùng URL mà máy chủ có thể truy cập không cần đăng nhập. Video riêng tư, link hết hạn hoặc cần mật khẩu sẽ không thể xử lý.
+            Hỗ trợ một video công khai mỗi lần. Video riêng tư, playlist, livestream hoặc nội dung yêu cầu đăng nhập sẽ không thể xử lý.
           </p>
         </div>
       </div>
@@ -1129,20 +1331,43 @@ function VideoLinkPanel({
           value={videoLink}
           onChange={(event) => setVideoLink(event.target.value)}
           className="min-w-0 flex-1 rounded-lg border border-border bg-[#fbf8ef] px-3 py-2.5 text-sm outline-none transition focus:border-primary"
-          placeholder="https://video.example.com/..."
+          placeholder="https://www.youtube.com/watch?v=..."
+          disabled={loading}
         />
         <button
           type="button"
           onClick={onSubmit}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
+          disabled={loading}
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90 disabled:cursor-wait disabled:opacity-65"
         >
-          <FileVideo className="h-4 w-4" />
-          Dùng link
+          {loading ? (
+            <span className="h-4 w-4 rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground animate-spin" />
+          ) : (
+            <FileVideo className="h-4 w-4" />
+          )}
+          {loading ? "Đang kiểm tra" : "Dùng link"}
         </button>
       </div>
+      <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-[#fbf8ef] px-3 py-3">
+        <input
+          type="checkbox"
+          checked={rightsAccepted}
+          onChange={(event) => setRightsAccepted(event.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-primary"
+        />
+        <span className="text-xs leading-5 text-muted-foreground">
+          Tôi sở hữu video này hoặc đã được chủ sở hữu cho phép sử dụng để tạo transcript.
+        </span>
+      </label>
+      {error && (
+        <div className="mt-3 rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2.5 text-xs leading-5 text-destructive">
+          {error}
+        </div>
+      )}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
-        <p className="text-xs leading-5 text-muted-foreground">
-          Kết nối lấy audio từ link đang được hoàn thiện cho backend Vbee.
+        <p className="inline-flex items-center gap-2 text-xs leading-5 text-muted-foreground">
+          <ShieldCheck className="h-4 w-4 shrink-0 text-primary" />
+          Link được kiểm tra thời lượng, quota và đưa vào hàng đợi như file tải lên.
         </p>
         <button
           type="button"
@@ -1291,7 +1516,11 @@ function UploadTimeEstimatePanel({
           Tính thời gian upload
         </div>
         <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-primary">
-          {uploadStatus === "uploading" ? "Đang xử lý" : "Ước tính trước"}
+          {uploadStatus === "uploading"
+            ? "Đang gửi file"
+            : uploadStatus === "queued"
+              ? "Đã xếp hàng"
+              : "Ước tính trước"}
         </span>
       </div>
 
@@ -1381,8 +1610,12 @@ function VbeeFileCard({
       ? "Đã chuyển đổi"
       : status === "uploading"
         ? "Đang xử lý"
+        : status === "queued"
+          ? "Đang chờ"
         : status === "error"
           ? "Lỗi"
+          : status === "cancelled"
+            ? "Đã hủy"
           : "Sẵn sàng";
 
   return (
@@ -1408,17 +1641,23 @@ function VbeeFileCard({
         <div>
           <span
             className={`inline-flex min-w-36 items-center justify-center gap-2 rounded-md px-4 py-2 text-xs font-black ${
-              status === "error"
+              status === "error" || status === "cancelled"
                 ? "bg-destructive/15 text-destructive"
                 : status === "idle"
                   ? "bg-primary/10 text-primary"
-                  : "bg-emerald-500 text-white"
+                  : status === "queued" || status === "uploading"
+                    ? "bg-primary/10 text-primary"
+                    : "bg-emerald-500 text-white"
             }`}
           >
-            {status === "uploading" ? (
-              <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+            {status === "uploading" || status === "queued" ? (
+              <span className="h-3 w-3 rounded-full border-2 border-primary/35 border-t-primary animate-spin" />
             ) : (
-              status !== "error" && <Check className="h-3.5 w-3.5" />
+              status === "error" || status === "cancelled" ? (
+                <X className="h-3.5 w-3.5" />
+              ) : (
+                <Check className="h-3.5 w-3.5" />
+              )
             )}
             {statusLabel}
           </span>
@@ -1463,7 +1702,13 @@ function UploadWorkflowSteps({
     ["4", "Biên tập", "Nghe lại, sửa, copy và xuất file"],
   ];
   const activeIndex =
-    status === "done" ? 3 : status === "uploading" ? 2 : hasFile ? 1 : 0;
+    status === "done"
+      ? 3
+      : status === "uploading" || status === "queued"
+        ? 2
+        : hasFile
+          ? 1
+          : 0;
 
   return (
     <div className="mt-4 grid gap-2 md:grid-cols-4">

@@ -1,39 +1,34 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   BadgeCheck,
-  BookOpen,
-  Building2,
-  Captions,
   Check,
   CheckCircle2,
   ChevronDown,
-  CircleDollarSign,
   Clock3,
   Crown,
   FileAudio,
-  FileText,
   Gift,
   Headphones,
   HelpCircle,
-  Languages,
   Mail,
-  Menu,
   Minus,
   PlugZap,
   ShieldCheck,
   Sparkles,
   Star,
   UploadCloud,
-  Video,
-  X,
   Zap,
 } from "lucide-react";
 import vbeeLogo from "@/assets/vbee-logo.png";
-import { VbeeBrandLogo } from "@/components/vbee-brand-logo";
+import { VbeePublicHeader } from "@/components/vbee-public-chrome";
 import { useAuth } from "@/context/AuthContext";
-import { createCheckout } from "@/lib/billing";
+import {
+  createCheckout,
+  createTopUpCheckout,
+  type TopUpCode,
+} from "@/lib/billing";
 import { type PlanCode } from "@/lib/quota";
 import {
   clearPendingPlanPurchase,
@@ -59,6 +54,14 @@ type Plan = {
   features: string[];
 };
 
+type TopUp = {
+  code: TopUpCode;
+  hours: string;
+  price: string;
+  desc: string;
+  popular?: boolean;
+};
+
 export const Route = createFileRoute("/pricing")({
   head: () => ({
     meta: [
@@ -72,7 +75,7 @@ export const Route = createFileRoute("/pricing")({
       {
         property: "og:description",
         content:
-          "So sánh gói Free, Basic, Pro và Business cho nền tảng chuyển giọng nói thành văn bản.",
+          "So sánh gói theo lượt, Tiêu chuẩn, Đặc biệt và Chuyên nghiệp cho nền tảng chuyển giọng nói thành văn bản.",
       },
     ],
   }),
@@ -81,144 +84,167 @@ export const Route = createFileRoute("/pricing")({
 
 const monthlyPlans: Plan[] = [
   {
-    code: "free",
-    name: "Free",
-    label: "Dùng thử",
-    desc: "Phù hợp để kiểm tra chất lượng nhận diện giọng nói.",
-    price: "0đ",
-    unit: "/tháng",
-    minutes: "30 phút",
-    cta: "Bắt đầu miễn phí",
-    features: ["30 phút xử lý mỗi tháng", "Tải file audio cơ bản", "Ghi âm trực tiếp", "Copy văn bản nhanh"],
-  },
-  {
     code: "standard",
     name: "Tiêu chuẩn",
     label: "Cá nhân",
-    desc: "Dành cho học tập, ghi chú, phỏng vấn ngắn và nội dung cá nhân.",
-    price: "39.000đ",
+    desc: "Dành cho học tập, ghi chú, phỏng vấn và nhu cầu cá nhân hằng tháng.",
+    price: "150.000đ",
     unit: "/tháng",
-    minutes: "300 phút",
+    minutes: "5 giờ",
     cta: "Chọn gói Tiêu chuẩn",
-    features: ["300 phút xử lý mỗi tháng", "Xuất DOCX/TXT", "Lưu lịch sử 30 ngày", "Ưu tiên tốc độ tiêu chuẩn"],
+    features: [
+      "5 giờ xử lý mỗi tháng",
+      "File dài tối đa 2 giờ",
+      "Lưu dữ liệu 90 ngày",
+      "API và ưu tiên queue 2×",
+    ],
   },
   {
     code: "special",
     name: "Đặc biệt",
     label: "Phổ biến",
-    desc: "Cho creator, sinh viên, nhóm nhỏ cần xử lý nhiều file hơn.",
-    price: "89.000đ",
+    desc: "Cho người sáng tạo và chuyên viên cần xử lý nhiều file thường xuyên.",
+    price: "449.000đ",
     unit: "/tháng",
-    minutes: "1.200 phút",
+    minutes: "20 giờ",
     badge: "Khuyên dùng",
     highlight: true,
     cta: "Đăng ký Đặc biệt",
-    features: ["1.200 phút xử lý mỗi tháng", "Nhận diện nhiều người nói", "Xuất DOCX/PDF/TXT", "Lưu lịch sử không giới hạn"],
+    features: [
+      "20 giờ xử lý mỗi tháng",
+      "File dài tối đa 4 giờ",
+      "Nhận diện nhiều người nói",
+      "API và ưu tiên queue 4×",
+    ],
   },
   {
     code: "business",
-    name: "Business",
-    label: "Doanh nghiệp",
-    desc: "Cho đội nhóm cần giới hạn riêng, bảo mật và hỗ trợ triển khai.",
-    price: "Liên hệ",
-    unit: "",
-    minutes: "Tùy chỉnh",
-    cta: "Liên hệ tư vấn",
-    features: ["Số phút theo nhu cầu", "Tài khoản đội nhóm", "API tích hợp", "Hỗ trợ kỹ thuật ưu tiên"],
+    name: "Chuyên nghiệp",
+    label: "Nâng cao",
+    desc: "Cho chuyên gia và đơn vị có khối lượng chuyển đổi lớn mỗi tháng.",
+    price: "799.000đ",
+    unit: "/tháng",
+    minutes: "40 giờ",
+    cta: "Chọn gói Chuyên nghiệp",
+    features: [
+      "40 giờ xử lý mỗi tháng",
+      "File dài tối đa 8 giờ",
+      "Lưu dữ liệu 1 năm",
+      "API, webhook và queue 8×",
+    ],
   },
 ];
 
 const yearlyPlans: Plan[] = [
   {
-    code: "free",
-    name: "Free",
-    label: "Dùng thử",
-    desc: "Giữ nguyên gói miễn phí để trải nghiệm trước khi nâng cấp.",
-    price: "0đ",
-    unit: "/năm",
-    minutes: "360 phút/năm",
-    cta: "Bắt đầu miễn phí",
-    features: ["360 phút xử lý mỗi năm", "Tải file audio cơ bản", "Ghi âm trực tiếp", "Copy văn bản nhanh"],
-  },
-  {
     code: "standard",
     name: "Tiêu chuẩn",
     label: "Tiết kiệm",
     desc: "Thanh toán năm cho người dùng cá nhân cần dùng đều đặn.",
-    price: "390.000đ",
+    price: "1.650.000đ",
     unit: "/năm",
-    minutes: "3.600 phút/năm",
-    saving: "Tiết kiệm 2 tháng",
+    minutes: "60 giờ/năm",
+    saving: "Tiết kiệm 1 tháng",
     cta: "Chọn gói Tiêu chuẩn",
-    features: ["3.600 phút xử lý mỗi năm", "Xuất DOCX/TXT", "Lưu lịch sử 12 tháng", "Ưu tiên tốc độ tiêu chuẩn"],
+    features: [
+      "Cấp đủ 60 giờ ngay sau thanh toán",
+      "File dài tối đa 2 giờ",
+      "Lưu dữ liệu 90 ngày",
+      "API và ưu tiên queue 2×",
+    ],
   },
   {
     code: "special",
     name: "Đặc biệt",
     label: "Tốt nhất",
     desc: "Gói năm tối ưu chi phí cho người dùng thường xuyên.",
-    price: "890.000đ",
+    price: "4.939.000đ",
     unit: "/năm",
-    minutes: "14.400 phút/năm",
+    minutes: "240 giờ/năm",
     badge: "Tối ưu nhất",
-    saving: "Tiết kiệm 178.000đ",
+    saving: "Tiết kiệm 1 tháng",
     highlight: true,
     cta: "Đăng ký Đặc biệt năm",
-    features: ["14.400 phút xử lý mỗi năm", "Nhận diện nhiều người nói", "Xuất DOCX/PDF/TXT", "Lưu lịch sử không giới hạn"],
+    features: [
+      "Cấp đủ 240 giờ ngay sau thanh toán",
+      "File dài tối đa 4 giờ",
+      "Nhận diện nhiều người nói",
+      "API và ưu tiên queue 4×",
+    ],
   },
   {
     code: "business",
-    name: "Business",
-    label: "Doanh nghiệp",
-    desc: "Hợp đồng năm, SLA riêng và hỗ trợ tích hợp hệ thống.",
-    price: "Liên hệ",
-    unit: "",
-    minutes: "Tùy chỉnh",
-    cta: "Nhận báo giá",
-    features: ["Số phút theo hợp đồng", "Quản lý người dùng", "API và webhook", "Hỗ trợ triển khai riêng"],
+    name: "Chuyên nghiệp",
+    label: "Nâng cao",
+    desc: "Gói năm cho chuyên gia và đơn vị có khối lượng xử lý lớn.",
+    price: "8.789.000đ",
+    unit: "/năm",
+    minutes: "480 giờ/năm",
+    saving: "Tiết kiệm 1 tháng",
+    cta: "Chọn gói Chuyên nghiệp",
+    features: [
+      "Cấp đủ 480 giờ ngay sau thanh toán",
+      "File dài tối đa 8 giờ",
+      "Lưu dữ liệu 1 năm",
+      "API, webhook và queue 8×",
+    ],
   },
 ];
 
-const pricingNavigation = [
+const topUps: TopUp[] = [
   {
-    label: "Sản phẩm",
-    items: [
-      { title: "Phiên âm AI", desc: "Audio/video thành văn bản", href: "/#transcription", icon: FileText },
-      { title: "Dịch thuật AI", desc: "Dịch transcript nhanh", href: "/#translation", icon: Languages },
-      { title: "Phụ đề & chú thích", desc: "Tạo SRT/VTT cho video", href: "/#subtitles", icon: Captions },
-      { title: "Vbee API", desc: "Tích hợp vào hệ thống", href: "/api", icon: PlugZap },
-    ],
+    code: "topup_1h",
+    hours: "1 giờ",
+    price: "39.000đ",
+    desc: "Phù hợp để xử lý một dự án ngắn.",
   },
   {
-    label: "Công ty",
-    items: [
-      { title: "Về chúng tôi", desc: "Tầm nhìn và sứ mệnh Vbee", href: "/about", icon: Building2 },
-      { title: "Liên hệ", desc: "Tư vấn triển khai", href: "/contact", icon: Mail },
-      { title: "Yêu cầu hỗ trợ", desc: "Hỗ trợ kỹ thuật", href: "/support", icon: Headphones },
-    ],
+    code: "topup_3h",
+    hours: "3 giờ",
+    price: "117.000đ",
+    desc: "Linh hoạt cho nhu cầu không thường xuyên.",
   },
   {
-    label: "Tài nguyên",
-    items: [
-      { title: "Blog", desc: "Kiến thức AI speech", href: "/#resources", icon: BookOpen },
-      { title: "Videos", desc: "Hướng dẫn sử dụng", href: "/#resources", icon: Video },
-      { title: "Tài liệu bán hàng", desc: "Thông tin gói cước", href: "#plans", icon: FileAudio },
-      { title: "Trung tâm trợ giúp", desc: "FAQ và hướng dẫn", href: "#faq", icon: Headphones },
-    ],
+    code: "topup_5h",
+    hours: "5 giờ",
+    price: "195.000đ",
+    desc: "Lựa chọn phổ biến cho nhiều file ngắn.",
+    popular: true,
   },
   {
-    label: "Kiếm tiền",
-    items: [
-      { title: "Chia sẻ giọng cộng đồng", desc: "Nhận thưởng giới thiệu", href: "/referral", icon: Gift },
-      { title: "Chương trình Affiliate", desc: "Hoa hồng đối tác", href: "/referral", icon: CircleDollarSign },
-    ],
+    code: "topup_10h",
+    hours: "10 giờ",
+    price: "390.000đ",
+    desc: "Phù hợp cho một chiến dịch nội dung.",
+  },
+  {
+    code: "topup_20h",
+    hours: "20 giờ",
+    price: "780.000đ",
+    desc: "Dành cho khối lượng xử lý trung bình.",
+  },
+  {
+    code: "topup_50h",
+    hours: "50 giờ",
+    price: "1.950.000đ",
+    desc: "Dành cho khối lượng xử lý lớn.",
+  },
+  {
+    code: "topup_100h",
+    hours: "100 giờ",
+    price: "3.900.000đ",
+    desc: "Gói theo lượt lớn nhất có thể mua trực tuyến.",
   },
 ];
 
 const faqs = [
   {
+    q: "Thời lượng mua theo lượt có hết hạn không?",
+    a: "Không. Thời lượng theo lượt được giữ trong tài khoản cho đến khi dùng hết, không yêu cầu đăng ký và không có mức sử dụng tối thiểu mỗi tháng.",
+  },
+  {
     q: "Gói theo tháng và theo năm khác nhau như thế nào?",
-    a: "Gói theo tháng linh hoạt, phù hợp dùng ngắn hạn. Gói theo năm có cùng bộ tính năng nhưng tổng chi phí thấp hơn và thời lượng được cấp theo năm.",
+    a: "Gói theo tháng linh hoạt, phù hợp dùng ngắn hạn. Gói theo năm có cùng bộ tính năng, được cấp đủ thời lượng của năm và có giá tương đương 11 tháng.",
   },
   {
     q: "Hết số phút xử lý thì có dùng tiếp được không?",
@@ -226,11 +252,11 @@ const faqs = [
   },
   {
     q: "Có thể xuất file Word không?",
-    a: "Có. Từ gói Basic trở lên có thể xuất DOCX/TXT; gói Pro hỗ trợ thêm định dạng phục vụ chia sẻ và lưu trữ.",
+    a: "Có. Từ gói Tiêu chuẩn trở lên có thể xuất DOCX/TXT; gói Đặc biệt hỗ trợ thêm định dạng phục vụ chia sẻ và lưu trữ.",
   },
   {
     q: "Doanh nghiệp có thể tích hợp API không?",
-    a: "Có. Gói Business được thiết kế cho nhu cầu API, quản lý đội nhóm, bảo mật và hỗ trợ triển khai riêng.",
+    a: "Có. Các đơn vị cần số phút lớn, nhiều tài khoản, SLA hoặc hạ tầng riêng có thể gửi yêu cầu để Vbee tư vấn cấu hình và báo giá riêng.",
   },
   {
     q: "Có hoàn tiền khi không dùng hết phút không?",
@@ -240,34 +266,125 @@ const faqs = [
 
 const featureGroups: Array<{
   title: string;
-  rows: Array<{ feature: string; free: CompareValue; basic: CompareValue; pro: CompareValue; business: CompareValue }>;
+  rows: Array<{
+    feature: string;
+    free: CompareValue;
+    basic: CompareValue;
+    pro: CompareValue;
+    business: CompareValue;
+  }>;
 }> = [
   {
     title: "Dung lượng và xử lý",
     rows: [
-      { feature: "Thời lượng xử lý", free: "30 phút/tháng", basic: "300 phút/tháng", pro: "1.200 phút/tháng", business: "Tùy chỉnh" },
-      { feature: "Kích thước file tối đa", free: "50MB", basic: "200MB", pro: "1GB", business: "Theo cấu hình" },
-      { feature: "Tốc độ xử lý ưu tiên", free: false, basic: false, pro: true, business: true },
-      { feature: "Nhận diện nhiều người nói", free: false, basic: false, pro: true, business: true },
+      {
+        feature: "Thời lượng xử lý",
+        free: "Theo giờ đã mua",
+        basic: "5 giờ/tháng",
+        pro: "20 giờ/tháng",
+        business: "40 giờ/tháng",
+      },
+      {
+        feature: "Thời lượng tối đa mỗi file",
+        free: "30 phút",
+        basic: "2 giờ",
+        pro: "4 giờ",
+        business: "8 giờ",
+      },
+      {
+        feature: "Kích thước file tối đa",
+        free: "50MB",
+        basic: "200MB",
+        pro: "200MB",
+        business: "Theo cấu hình hạ tầng",
+      },
+      {
+        feature: "Trọng số ưu tiên queue",
+        free: "1×",
+        basic: "2×",
+        pro: "4×",
+        business: "8×",
+      },
+      {
+        feature: "Nhận diện nhiều người nói",
+        free: false,
+        basic: false,
+        pro: true,
+        business: true,
+      },
     ],
   },
   {
     title: "Tính năng transcript",
     rows: [
-      { feature: "Copy văn bản", free: true, basic: true, pro: true, business: true },
-      { feature: "Xuất TXT", free: false, basic: true, pro: true, business: true },
-      { feature: "Xuất DOCX", free: false, basic: true, pro: true, business: true },
-      { feature: "Xuất PDF", free: false, basic: false, pro: true, business: true },
-      { feature: "Lưu lịch sử", free: "7 ngày", basic: "30 ngày", pro: "Không giới hạn", business: "Theo hợp đồng" },
+      {
+        feature: "Copy văn bản",
+        free: true,
+        basic: true,
+        pro: true,
+        business: true,
+      },
+      {
+        feature: "Xuất TXT",
+        free: false,
+        basic: true,
+        pro: true,
+        business: true,
+      },
+      {
+        feature: "Xuất DOCX",
+        free: false,
+        basic: true,
+        pro: true,
+        business: true,
+      },
+      {
+        feature: "Xuất PDF",
+        free: false,
+        basic: false,
+        pro: true,
+        business: true,
+      },
+      {
+        feature: "Lưu dữ liệu",
+        free: "7 ngày",
+        basic: "90 ngày",
+        pro: "1 năm",
+        business: "1 năm",
+      },
     ],
   },
   {
     title: "Quản trị và hỗ trợ",
     rows: [
-      { feature: "Tài khoản đội nhóm", free: false, basic: false, pro: false, business: true },
-      { feature: "API tích hợp", free: false, basic: false, pro: false, business: true },
-      { feature: "Hỗ trợ email", free: false, basic: true, pro: true, business: true },
-      { feature: "Hỗ trợ ưu tiên", free: false, basic: false, pro: true, business: true },
+      {
+        feature: "Số người dùng",
+        free: "1",
+        basic: "1",
+        pro: "1",
+        business: "1",
+      },
+      {
+        feature: "API / Webhook",
+        free: false,
+        basic: true,
+        pro: true,
+        business: true,
+      },
+      {
+        feature: "Hỗ trợ email",
+        free: false,
+        basic: true,
+        pro: true,
+        business: true,
+      },
+      {
+        feature: "Hỗ trợ ưu tiên",
+        free: false,
+        basic: false,
+        pro: true,
+        business: true,
+      },
     ],
   },
 ];
@@ -325,22 +442,27 @@ function PricingPage() {
       return;
     }
 
-    void navigate({ to: "/login", search: { error: undefined, from: "/pricing" } });
+    void navigate({
+      to: "/login",
+      search: { error: undefined, from: "/pricing" },
+    });
   }
 
   async function handleSelectPlan(plan: Plan) {
     setPlanMessage("");
 
-    if (plan.code === "business") {
-      document.getElementById("enterprise")?.scrollIntoView({ behavior: "smooth" });
-      return;
-    }
-
     if (!user || !token) {
-      if (plan.code === "standard" || plan.code === "special") {
+      if (
+        plan.code === "standard" ||
+        plan.code === "special" ||
+        plan.code === "business"
+      ) {
         savePendingPlanPurchase(plan.code, billing, plan.name);
       }
-      void navigate({ to: "/login", search: { error: undefined, from: "/pricing" } });
+      void navigate({
+        to: "/login",
+        search: { error: undefined, from: "/pricing" },
+      });
       return;
     }
 
@@ -351,7 +473,11 @@ function PricingPage() {
 
     setUpgradingPlan(plan.name);
     try {
-      if (plan.code !== "standard" && plan.code !== "special") {
+      if (
+        plan.code !== "standard" &&
+        plan.code !== "special" &&
+        plan.code !== "business"
+      ) {
         setPlanMessage("Gói này chưa hỗ trợ thanh toán tự động");
         return;
       }
@@ -370,9 +496,35 @@ function PricingPage() {
     }
   }
 
+  async function handleSelectTopUp(product: TopUp) {
+    setPlanMessage("");
+    if (!user || !token) {
+      void navigate({
+        to: "/login",
+        search: { error: undefined, from: "/pricing" },
+      });
+      return;
+    }
+
+    setUpgradingPlan(product.code);
+    try {
+      const checkout = await createTopUpCheckout(token, product.code);
+      void navigate({
+        to: "/checkout/$orderId",
+        params: { orderId: checkout.order.id },
+      });
+    } catch (error) {
+      setPlanMessage(
+        error instanceof Error ? error.message : "Không tạo được đơn mua thêm",
+      );
+    } finally {
+      setUpgradingPlan("");
+    }
+  }
+
   return (
     <main className="min-h-screen bg-white text-[#21104a]">
-      <PricingHeader onStart={handleStart} />
+      <VbeePublicHeader />
       <PricingHero billing={billing} setBilling={setBilling} />
       {planMessage && (
         <div className="mx-auto mb-6 max-w-4xl px-4 md:px-6">
@@ -387,6 +539,11 @@ function PricingPage() {
         upgradingPlan={upgradingPlan}
         onSelectPlan={(plan) => void handleSelectPlan(plan)}
       />
+      <TopUpCards
+        products={topUps}
+        busyProduct={upgradingPlan}
+        onSelect={(product) => void handleSelectTopUp(product)}
+      />
       <PricingValueBand />
       <CompareTable billing={billing} setBilling={setBilling} />
       <PricingFaq />
@@ -396,77 +553,6 @@ function PricingPage() {
   );
 }
 
-function PricingHeader({ onStart }: { onStart: () => void }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  return (
-    <header className="sticky top-0 z-50 border-b border-[#ece6ff] bg-white/92 shadow-[0_10px_35px_rgba(33,16,74,.05)] backdrop-blur-xl">
-      <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-6">
-        <Link to="/" className="flex items-center" aria-label="Vbee AIVoice">
-          <VbeeBrandLogo />
-        </Link>
-
-        <div className="hidden items-center gap-1 lg:flex">
-          {pricingNavigation.map((group) => (
-            <div key={group.label} className="group relative">
-              <button className="inline-flex items-center gap-1 rounded-full px-4 py-2 text-sm font-black text-[#21104a] transition hover:bg-[#f1eef7]">
-                {group.label} <ChevronDown className="h-4 w-4 transition group-hover:rotate-180" />
-              </button>
-              <div className="invisible absolute left-0 top-full z-40 w-[320px] translate-y-3 rounded-[1.5rem] border border-[#eee8ff] bg-white p-3 opacity-0 shadow-[0_24px_80px_rgba(33,16,74,.18)] transition group-hover:visible group-hover:translate-y-2 group-hover:opacity-100">
-                {group.items.map((item) => (
-                  <a key={item.title} href={item.href} className="flex gap-3 rounded-2xl p-3 transition hover:bg-[#f8f5ff]">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#fff3a6] text-[#21104a]">
-                      <item.icon className="h-5 w-5" />
-                    </span>
-                    <span>
-                      <span className="block text-sm font-black text-[#21104a]">{item.title}</span>
-                      <span className="mt-0.5 block text-xs font-semibold leading-5 text-[#756894]">{item.desc}</span>
-                    </span>
-                  </a>
-                ))}
-              </div>
-            </div>
-          ))}
-          <span className="rounded-full bg-[#fff2a3] px-4 py-2 text-sm font-black text-[#21104a] shadow-inner">Bảng giá</span>
-        </div>
-
-        <div className="hidden items-center gap-2 md:flex">
-          <button onClick={onStart} className="rounded-full px-4 py-2 text-sm font-black text-[#21104a] transition hover:bg-[#f1eef7]">Đăng nhập</button>
-          <button onClick={onStart} className="inline-flex items-center gap-2 rounded-full bg-[#ffcb05] px-5 py-2.5 text-sm font-black text-[#21104a] shadow-[0_12px_30px_rgba(255,203,5,.35)] transition hover:-translate-y-0.5 hover:bg-[#ffdc45]">
-            Dùng thử <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
-
-        <button onClick={() => setMobileOpen((v) => !v)} className="grid h-11 w-11 place-items-center rounded-full bg-[#f2f0f7] text-[#21104a] lg:hidden" aria-label="Mở menu">
-          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
-      </nav>
-
-      {mobileOpen && (
-        <div className="border-t border-[#eee8ff] bg-white px-4 py-4 lg:hidden">
-          <div className="space-y-3">
-            {pricingNavigation.map((group) => (
-              <details key={group.label} className="rounded-2xl bg-[#f8f5ff] p-3">
-                <summary className="flex cursor-pointer list-none items-center justify-between font-black text-[#21104a]">
-                  {group.label} <ChevronDown className="h-4 w-4" />
-                </summary>
-                <div className="mt-3 grid gap-2">
-                  {group.items.map((item) => (
-                    <a key={item.title} href={item.href} onClick={() => setMobileOpen(false)} className="rounded-xl bg-white px-3 py-2 text-sm font-bold text-[#37235f]">
-                      {item.title}
-                    </a>
-                  ))}
-                </div>
-              </details>
-            ))}
-            <div className="block rounded-2xl bg-[#fff2a3] px-4 py-3 font-black text-[#21104a]">Bảng giá</div>
-            <button onClick={onStart} className="w-full rounded-2xl bg-[#ffcb05] px-5 py-3 font-black text-[#21104a]">Bắt đầu miễn phí</button>
-          </div>
-        </div>
-      )}
-    </header>
-  );
-}
 function PricingHero({
   billing,
   setBilling,
@@ -476,8 +562,6 @@ function PricingHero({
 }) {
   return (
     <section className="relative overflow-hidden bg-[#21104a] px-4 pb-10 pt-10 text-white md:px-6 md:pb-14 md:pt-12">
-      <div className="absolute left-1/2 top-0 h-72 w-72 -translate-x-1/2 rounded-full bg-[#ffcb05]/20 blur-3xl" />
-      <div className="absolute right-[12%] top-20 h-52 w-52 rounded-full bg-[#6c45ae]/45 blur-3xl" />
       <div className="absolute inset-0 opacity-20 vbee-foundation-grid" />
 
       <div className="relative mx-auto max-w-7xl text-center">
@@ -492,20 +576,37 @@ function PricingHero({
           Bạn có thể chuyển giữa giá theo tháng và theo năm.
         </p>
 
-        <BillingToggle billing={billing} setBilling={setBilling} className="mt-8" />
+        <BillingToggle
+          billing={billing}
+          setBilling={setBilling}
+          className="mt-8"
+        />
+        <p className="mt-4 text-xs font-bold text-white/70">
+          Tài khoản mới được tặng 30 phút dùng thử một lần. Không cần thẻ thanh
+          toán.
+        </p>
 
         <div className="mx-auto mt-6 grid max-w-3xl gap-3 text-left md:grid-cols-3">
           {[
             [Clock3, "Linh hoạt", "Nâng cấp hoặc đổi gói theo nhu cầu xử lý."],
-            [ShieldCheck, "Bảo mật", "Lịch sử và file được gắn với tài khoản đăng nhập."],
+            [
+              ShieldCheck,
+              "Bảo mật",
+              "Lịch sử và file được gắn với tài khoản đăng nhập.",
+            ],
             [Gift, "Tiết kiệm", "Gói năm phù hợp người dùng thường xuyên."],
           ].map(([Icon, title, desc]) => {
             const TypedIcon = Icon as typeof Clock3;
             return (
-              <div key={String(title)} className="rounded-2xl border border-white/15 bg-white/10 p-4">
+              <div
+                key={String(title)}
+                className="rounded-2xl border border-white/15 bg-white/10 p-4"
+              >
                 <TypedIcon className="h-5 w-5 text-[#ffcb05]" />
                 <p className="mt-3 font-black text-white">{title as string}</p>
-                <p className="mt-1 text-xs leading-5 text-white/65">{desc as string}</p>
+                <p className="mt-1 text-xs leading-5 text-white/65">
+                  {desc as string}
+                </p>
               </div>
             );
           })}
@@ -524,10 +625,13 @@ function BillingToggle({
   setBilling: (billing: BillingCycle) => void;
   className?: string;
 }) {
-  const itemClass = "relative z-10 rounded-full px-5 py-2.5 text-[13px] font-black transition md:px-7";
+  const itemClass =
+    "relative z-10 rounded-full px-5 py-2.5 text-[13px] font-black transition md:px-7";
 
   return (
-    <div className={`inline-flex rounded-full border border-[#e8decc] bg-white p-1 shadow-[0_16px_45px_rgba(33,16,74,.08)] ${className}`}>
+    <div
+      className={`inline-flex rounded-full border border-[#e8decc] bg-white p-1 shadow-[0_16px_45px_rgba(33,16,74,.08)] ${className}`}
+    >
       <button
         type="button"
         onClick={() => setBilling("monthly")}
@@ -540,7 +644,10 @@ function BillingToggle({
         onClick={() => setBilling("yearly")}
         className={`${itemClass} ${billing === "yearly" ? "bg-[#ffcb05] text-[#21104a] shadow-[0_10px_30px_rgba(255,203,5,.32)]" : "text-[#6a5a8f] hover:text-[#21104a]"}`}
       >
-        Theo năm <span className="ml-1 hidden rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-black text-[#7a5d00] sm:inline">tiết kiệm</span>
+        Theo năm{" "}
+        <span className="ml-1 hidden rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-black text-[#7a5d00] sm:inline">
+          tiết kiệm
+        </span>
       </button>
     </div>
   );
@@ -558,24 +665,86 @@ function PlanCards({
   onSelectPlan: (plan: Plan) => void;
 }) {
   return (
-    <section id="plans" className="px-4 pb-12 md:px-6 md:pb-14">
+    <section id="plans" className="px-4 py-12 md:px-6 md:py-14">
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col justify-between gap-3 md:flex-row md:items-end">
           <div>
             <p className="text-sm font-black uppercase tracking-wide text-[#9a7b00]">
-              {billing === "monthly" ? "Bảng giá theo tháng" : "Bảng giá theo năm"}
+              {billing === "monthly"
+                ? "Bảng giá theo tháng"
+                : "Bảng giá theo năm"}
             </p>
             <h2 className="mt-2 text-xl font-black text-[#21104a] md:text-3xl">
-              {billing === "monthly" ? "Thanh toán linh hoạt hàng tháng" : "Thanh toán năm tiết kiệm hơn"}
+              {billing === "monthly"
+                ? "Thanh toán linh hoạt hàng tháng"
+                : "Thanh toán năm tiết kiệm hơn"}
             </h2>
           </div>
           <p className="max-w-xl text-sm leading-7 text-[#6a5a8f]">
-            Mỗi gói gồm số phút xử lý, giới hạn file và quyền xuất dữ liệu khác nhau.
-            Gói được đề xuất phù hợp với người dùng cần xử lý thường xuyên.
+            Mua theo lượt khi nhu cầu không đều, hoặc đăng ký thuê bao để có
+            quota định kỳ và được ưu tiên xử lý nhanh hơn.
           </p>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-4">
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <article className="relative flex min-h-[460px] flex-col rounded-2xl border border-[#eee4d3] bg-white p-5 text-[#21104a] shadow-[0_14px_45px_rgba(33,16,74,.06)] transition hover:-translate-y-1">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <span className="rounded-full bg-[#fff7c2] px-3 py-1 text-[11px] font-black uppercase tracking-wide text-[#725a00]">
+                  Không thuê bao
+                </span>
+                <h3 className="mt-5 text-2xl font-black">Theo lượt sử dụng</h3>
+              </div>
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#f7f3ff] text-[#21104a]">
+                <Clock3 className="h-5 w-5" />
+              </div>
+            </div>
+
+            <p className="mt-4 min-h-[72px] text-sm leading-6 text-[#6a5a8f]">
+              Chỉ trả tiền cho số giờ cần dùng. Thời lượng đã mua được giữ đến
+              khi dùng hết.
+            </p>
+
+            <div className="mt-5 rounded-2xl border border-current/10 p-4">
+              <p className="text-xs font-bold text-[#6a5a8f]">Thời lượng</p>
+              <p className="mt-1 text-lg font-black">Từ 1 giờ</p>
+            </div>
+
+            <div className="mt-6 flex items-end gap-1">
+              <span className="text-2xl font-black tracking-tight md:text-3xl">
+                39.000đ
+              </span>
+              <span className="pb-1 text-sm font-bold text-[#6a5a8f]">
+                /giờ
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-[#9b90ad]">Không phí duy trì</p>
+
+            <a
+              href="#pay-as-you-go"
+              className="mt-6 w-full rounded-full bg-[#21104a] px-5 py-3 text-center text-sm font-black text-white transition hover:bg-[#30116b]"
+            >
+              Chọn số giờ
+            </a>
+
+            <div className="mt-6 space-y-3">
+              {[
+                "Không yêu cầu đăng ký",
+                "Không có mức dùng tối thiểu",
+                "Thời lượng không hết hạn",
+                "Thanh toán trực tuyến qua PayOS",
+              ].map((feature) => (
+                <div
+                  key={feature}
+                  className="flex items-start gap-3 text-sm font-semibold leading-6"
+                >
+                  <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[#17b26a]" />
+                  <span className="text-[#4d3c75]">{feature}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+
           {plans.map((plan) => (
             <article
               key={plan.name}
@@ -593,32 +762,64 @@ function PlanCards({
 
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <span className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ${plan.highlight ? "bg-white/10 text-[#ffcb05]" : "bg-[#fff7c2] text-[#725a00]"}`}>
+                  <span
+                    className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ${plan.highlight ? "bg-white/10 text-[#ffcb05]" : "bg-[#fff7c2] text-[#725a00]"}`}
+                  >
                     {plan.label}
                   </span>
                   <h3 className="mt-5 text-2xl font-black">{plan.name}</h3>
                 </div>
-                <div className={`grid h-11 w-11 place-items-center rounded-2xl ${plan.highlight ? "bg-[#ffcb05] text-[#21104a]" : "bg-[#f7f3ff] text-[#21104a]"}`}>
-                  {plan.highlight ? <Crown className="h-5 w-5" /> : <FileAudio className="h-5 w-5" />}
+                <div
+                  className={`grid h-11 w-11 place-items-center rounded-2xl ${plan.highlight ? "bg-[#ffcb05] text-[#21104a]" : "bg-[#f7f3ff] text-[#21104a]"}`}
+                >
+                  {plan.highlight ? (
+                    <Crown className="h-5 w-5" />
+                  ) : (
+                    <FileAudio className="h-5 w-5" />
+                  )}
                 </div>
               </div>
 
-              <p className={`mt-4 min-h-[72px] text-sm leading-6 ${plan.highlight ? "text-white/70" : "text-[#6a5a8f]"}`}>{plan.desc}</p>
+              <p
+                className={`mt-4 min-h-[72px] text-sm leading-6 ${plan.highlight ? "text-white/70" : "text-[#6a5a8f]"}`}
+              >
+                {plan.desc}
+              </p>
 
               <div className="mt-5 rounded-2xl border border-current/10 p-4">
-                <p className={`text-xs font-bold ${plan.highlight ? "text-white/60" : "text-[#6a5a8f]"}`}>Thời lượng</p>
+                <p
+                  className={`text-xs font-bold ${plan.highlight ? "text-white/60" : "text-[#6a5a8f]"}`}
+                >
+                  Thời lượng
+                </p>
                 <p className="mt-1 text-lg font-black">{plan.minutes}</p>
               </div>
 
               <div className="mt-6 flex items-end gap-1">
-                <span className="text-2xl font-black tracking-tight md:text-3xl">{plan.price}</span>
-                {plan.unit && <span className={`pb-1 text-sm font-bold ${plan.highlight ? "text-white/60" : "text-[#6a5a8f]"}`}>{plan.unit}</span>}
+                <span className="text-2xl font-black tracking-tight md:text-3xl">
+                  {plan.price}
+                </span>
+                {plan.unit && (
+                  <span
+                    className={`pb-1 text-sm font-bold ${plan.highlight ? "text-white/60" : "text-[#6a5a8f]"}`}
+                  >
+                    {plan.unit}
+                  </span>
+                )}
               </div>
 
               {plan.saving ? (
-                <p className={`mt-2 text-xs font-black ${plan.highlight ? "text-[#ffcb05]" : "text-[#9a7b00]"}`}>{plan.saving}</p>
+                <p
+                  className={`mt-2 text-xs font-black ${plan.highlight ? "text-[#ffcb05]" : "text-[#9a7b00]"}`}
+                >
+                  {plan.saving}
+                </p>
               ) : (
-                <p className={`mt-2 text-xs ${plan.highlight ? "text-white/50" : "text-[#9b90ad]"}`}>Không phí cài đặt</p>
+                <p
+                  className={`mt-2 text-xs ${plan.highlight ? "text-white/50" : "text-[#9b90ad]"}`}
+                >
+                  Không phí cài đặt
+                </p>
               )}
 
               <button
@@ -635,9 +836,18 @@ function PlanCards({
 
               <div className="mt-6 space-y-3">
                 {plan.features.map((feature) => (
-                  <div key={feature} className="flex items-start gap-3 text-sm font-semibold leading-6">
+                  <div
+                    key={feature}
+                    className="flex items-start gap-3 text-sm font-semibold leading-6"
+                  >
                     <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[#17b26a]" />
-                    <span className={plan.highlight ? "text-white/78" : "text-[#4d3c75]"}>{feature}</span>
+                    <span
+                      className={
+                        plan.highlight ? "text-white/78" : "text-[#4d3c75]"
+                      }
+                    >
+                      {feature}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -649,22 +859,164 @@ function PlanCards({
   );
 }
 
+function TopUpCards({
+  products,
+  busyProduct,
+  onSelect,
+}: {
+  products: TopUp[];
+  busyProduct: string;
+  onSelect: (product: TopUp) => void;
+}) {
+  const [selectedCode, setSelectedCode] = useState<TopUpCode>("topup_5h");
+  const selectedProduct =
+    products.find((product) => product.code === selectedCode) ?? products[0];
+
+  if (!selectedProduct) return null;
+
+  return (
+    <section
+      id="pay-as-you-go"
+      className="border-y border-[#eee8ff] bg-[#f7f5ff] px-4 py-10 md:px-6 md:py-14"
+    >
+      <div className="mx-auto max-w-7xl">
+        <div className="grid overflow-hidden rounded-2xl border border-[#e7def5] bg-white shadow-[0_18px_60px_rgba(33,16,74,.1)] lg:grid-cols-[.8fr_1.2fr]">
+          <div className="bg-[#21104a] p-6 text-white md:p-8 lg:p-10">
+            <p className="text-xs font-black uppercase tracking-wide text-[#ffcb05]">
+              Thanh toán theo từng lần sử dụng
+            </p>
+            <h2 className="mt-4 text-2xl font-black leading-tight md:text-3xl">
+              Mua đúng số giờ bạn cần
+            </h2>
+            <p className="mt-4 text-sm leading-7 text-white/72">
+              Phù hợp với dự án không thường xuyên. Không cần đăng ký thuê bao,
+              không yêu cầu mức sử dụng tối thiểu hằng tháng.
+            </p>
+
+            <div className="mt-7 space-y-4 border-t border-white/15 pt-6 text-sm font-semibold text-white/82">
+              {[
+                "39.000đ cho mỗi giờ chuyển đổi",
+                "Thời lượng đã mua không hết hạn",
+                "Cộng trực tiếp vào quota hiện có",
+                "Thanh toán QR ngay trên website",
+              ].map((item) => (
+                <div key={item} className="flex items-start gap-3">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#ffcb05]" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-6 md:p-8 lg:p-10">
+            <p className="text-sm font-black text-[#21104a]">
+              Chọn số giờ phù hợp
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {products.map((product) => {
+                const selected = product.code === selectedProduct.code;
+                return (
+                  <button
+                    key={product.code}
+                    type="button"
+                    onClick={() => setSelectedCode(product.code)}
+                    className={`relative rounded-full border px-4 py-3 text-sm font-black transition ${
+                      selected
+                        ? "border-[#21104a] bg-[#21104a] text-white shadow-[0_10px_30px_rgba(33,16,74,.2)]"
+                        : "border-[#e7def5] bg-white text-[#21104a] hover:border-[#ffcb05]"
+                    }`}
+                    aria-pressed={selected}
+                  >
+                    {product.popular && (
+                      <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-[#ffcb05] px-2 py-0.5 text-[9px] font-black uppercase text-[#21104a]">
+                        Phổ biến
+                      </span>
+                    )}
+                    {product.hours}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-7 border-y border-[#eee8ff] py-5">
+              <div className="flex items-start justify-between gap-6">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wide text-[#9a7b00]">
+                    Gói đã chọn
+                  </p>
+                  <p className="mt-2 text-xl font-black text-[#21104a]">
+                    {selectedProduct.hours}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-[#6a5a8f]">
+                    {selectedProduct.desc}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-bold text-[#6a5a8f]">
+                    Tổng thanh toán
+                  </p>
+                  <p className="mt-2 text-2xl font-black text-[#21104a]">
+                    {selectedProduct.price}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onSelect(selectedProduct)}
+              disabled={busyProduct === selectedProduct.code}
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#ffcb05] px-5 py-3.5 text-sm font-black text-[#21104a] transition hover:bg-[#ffd842] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {busyProduct === selectedProduct.code
+                ? "Đang tạo đơn thanh toán..."
+                : `Tiếp tục thanh toán · ${selectedProduct.price}`}
+              <ArrowRight className="h-4 w-4" />
+            </button>
+            <p className="mt-4 flex items-center justify-center gap-2 text-center text-xs font-bold text-[#8d829f]">
+              <ShieldCheck className="h-4 w-4 text-[#17b26a]" /> Thanh toán an
+              toàn qua PayOS by Casso
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function PricingValueBand() {
   const values = [
-    { icon: Sparkles, title: "1000+ giọng AI", desc: "Khu giới thiệu năng lực giọng đọc, lồng tiếng và nhân bản giọng nói cho phiên bản mở rộng." },
-    { icon: Clock3, title: "Tiết kiệm đến 90%", desc: "Nhấn mạnh lợi ích giảm thời gian ghi âm, xử lý nội dung và vận hành đội nhóm." },
-    { icon: PlugZap, title: "API sẵn sàng mở rộng", desc: "Thiết kế UI đã có vị trí cho API, webhook, team workspace và gói doanh nghiệp." },
+    {
+      icon: Sparkles,
+      title: "Đổi giọng thành văn bản",
+      desc: "Chuyển đổi giọng nói thành văn bản chính xác và nhanh chóng.",
+    },
+    {
+      icon: Clock3,
+      title: "Tiết kiệm đến 90%",
+      desc: "Nhấn mạnh lợi ích giảm thời gian ghi âm, xử lý nội dung và vận hành đội nhóm.",
+    },
+    {
+      icon: PlugZap,
+      title: "API sẵn sàng mở rộng",
+      desc: "Kết nối API và webhook để đưa quy trình chuyển đổi vào hệ thống vận hành hiện có.",
+    },
   ];
 
   return (
     <section className="bg-[#f7f5ff] px-4 py-10 md:px-6 md:py-12">
       <div className="mx-auto grid max-w-7xl gap-4 md:grid-cols-3">
         {values.map((item) => (
-          <div key={item.title} className="rounded-xl border border-[#eee4d3] bg-white p-5 shadow-[0_10px_35px_rgba(33,16,74,.05)]">
+          <div
+            key={item.title}
+            className="rounded-xl border border-[#eee4d3] bg-white p-5 shadow-[0_10px_35px_rgba(33,16,74,.05)]"
+          >
             <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#21104a] text-[#ffcb05]">
               <item.icon className="h-6 w-6" />
             </div>
-            <h3 className="mt-4 text-lg font-black text-[#21104a]">{item.title}</h3>
+            <h3 className="mt-4 text-lg font-black text-[#21104a]">
+              {item.title}
+            </h3>
             <p className="mt-2 text-sm leading-7 text-[#6a5a8f]">{item.desc}</p>
           </div>
         ))}
@@ -688,9 +1040,10 @@ function CompareTable({
       if (!yearlyMultiplier || row.feature !== "Thời lượng xử lý") return row;
       return {
         ...row,
-        free: "360 phút/năm",
-        basic: "3.600 phút/năm",
-        pro: "14.400 phút/năm",
+        free: "Theo giờ đã mua",
+        basic: "60 giờ/năm",
+        pro: "240 giờ/năm",
+        business: "480 giờ/năm",
       };
     }),
   }));
@@ -703,10 +1056,12 @@ function CompareTable({
             <div className="inline-flex items-center gap-2 rounded-full bg-[#fff7c2] px-4 py-2 text-xs font-black uppercase tracking-wide text-[#725a00]">
               <BadgeCheck className="h-4 w-4" /> So sánh chi tiết
             </div>
-            <h2 className="mt-4 text-2xl font-black text-[#21104a] md:text-3xl">Bảng so sánh tính năng</h2>
+            <h2 className="mt-4 text-2xl font-black text-[#21104a] md:text-3xl">
+              Bảng so sánh tính năng
+            </h2>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-[#6a5a8f]">
-              So sánh nhanh thời lượng, giới hạn file, xuất dữ liệu, API và hỗ trợ
-              để chọn gói phù hợp trước khi thanh toán.
+              So sánh nhanh thời lượng, giới hạn file, xuất dữ liệu, API và hỗ
+              trợ để chọn gói phù hợp trước khi thanh toán.
             </p>
           </div>
           <BillingToggle billing={billing} setBilling={setBilling} />
@@ -717,16 +1072,32 @@ function CompareTable({
             <table className="w-full min-w-[860px] border-collapse text-left text-sm">
               <thead>
                 <tr className="bg-[#fbf8ef] text-[#21104a]">
-                  <th className="w-[28%] px-5 py-5 text-xs font-black uppercase tracking-wide text-[#6a5a8f]">Tính năng</th>
-                  <PlanHead name="Free" price={billing === "monthly" ? "0đ" : "0đ"} />
-                  <PlanHead name="Tiêu chuẩn" price={billing === "monthly" ? "39.000đ" : "390.000đ"} />
-                  <PlanHead name="Đặc biệt" price={billing === "monthly" ? "89.000đ" : "890.000đ"} highlight />
-                  <PlanHead name="Business" price="Liên hệ" />
+                  <th className="w-[28%] px-5 py-5 text-xs font-black uppercase tracking-wide text-[#6a5a8f]">
+                    Tính năng
+                  </th>
+                  <PlanHead name="Theo lượt" price="39.000đ/giờ" />
+                  <PlanHead
+                    name="Tiêu chuẩn"
+                    price={billing === "monthly" ? "150.000đ" : "1.650.000đ"}
+                  />
+                  <PlanHead
+                    name="Đặc biệt"
+                    price={billing === "monthly" ? "449.000đ" : "4.939.000đ"}
+                    highlight
+                  />
+                  <PlanHead
+                    name="Chuyên nghiệp"
+                    price={billing === "monthly" ? "799.000đ" : "8.789.000đ"}
+                  />
                 </tr>
               </thead>
               <tbody>
                 {getDisplayRows.map((group) => (
-                  <FragmentGroup key={group.title} title={group.title} rows={group.rows} />
+                  <FragmentGroup
+                    key={group.title}
+                    title={group.title}
+                    rows={group.rows}
+                  />
                 ))}
               </tbody>
             </table>
@@ -734,22 +1105,39 @@ function CompareTable({
         </div>
 
         <div className="mt-5 rounded-2xl border border-[#eee4d3] bg-[#fbf8ef] p-5 text-sm leading-7 text-[#6a5a8f]">
-          <strong className="text-[#21104a]">Ghi chú:</strong> Giá, thời lượng và
-          tính năng có thể thay đổi theo chính sách gói cước tại thời điểm đăng ký.
+          <strong className="text-[#21104a]">Ghi chú:</strong> Giá, thời lượng
+          và tính năng có thể thay đổi theo chính sách gói cước tại thời điểm
+          đăng ký.
         </div>
       </div>
     </section>
   );
 }
 
-function PlanHead({ name, price, highlight = false }: { name: string; price: string; highlight?: boolean }) {
+function PlanHead({
+  name,
+  price,
+  highlight = false,
+}: {
+  name: string;
+  price: string;
+  highlight?: boolean;
+}) {
   return (
-    <th className={`px-5 py-5 ${highlight ? "bg-[#21104a] text-white" : "text-[#21104a]"}`}>
+    <th
+      className={`px-5 py-5 ${highlight ? "bg-[#21104a] text-white" : "text-[#21104a]"}`}
+    >
       <div className="flex items-center gap-2">
-        {highlight && <Star className="h-4 w-4 fill-[#ffcb05] text-[#ffcb05]" />}
+        {highlight && (
+          <Star className="h-4 w-4 fill-[#ffcb05] text-[#ffcb05]" />
+        )}
         <span className="text-base font-black">{name}</span>
       </div>
-      <p className={`mt-1 text-lg font-black ${highlight ? "text-[#ffcb05]" : "text-[#21104a]"}`}>{price}</p>
+      <p
+        className={`mt-1 text-lg font-black ${highlight ? "text-[#ffcb05]" : "text-[#21104a]"}`}
+      >
+        {price}
+      </p>
     </th>
   );
 }
@@ -759,18 +1147,32 @@ function FragmentGroup({
   rows,
 }: {
   title: string;
-  rows: Array<{ feature: string; free: CompareValue; basic: CompareValue; pro: CompareValue; business: CompareValue }>;
+  rows: Array<{
+    feature: string;
+    free: CompareValue;
+    basic: CompareValue;
+    pro: CompareValue;
+    business: CompareValue;
+  }>;
 }) {
   return (
     <>
       <tr>
-        <td colSpan={5} className="border-t border-[#eee8ff] bg-[#f7f3ff] px-5 py-3 text-xs font-black uppercase tracking-wide text-[#21104a]">
+        <td
+          colSpan={5}
+          className="border-t border-[#eee8ff] bg-[#f7f3ff] px-5 py-3 text-xs font-black uppercase tracking-wide text-[#21104a]"
+        >
           {title}
         </td>
       </tr>
       {rows.map((row, index) => (
-        <tr key={row.feature} className={index % 2 === 0 ? "bg-white" : "bg-[#fcfbff]"}>
-          <td className="border-t border-[#eee8ff] px-5 py-4 font-bold text-[#4d3c75]">{row.feature}</td>
+        <tr
+          key={row.feature}
+          className={index % 2 === 0 ? "bg-white" : "bg-[#fcfbff]"}
+        >
+          <td className="border-t border-[#eee8ff] px-5 py-4 font-bold text-[#4d3c75]">
+            {row.feature}
+          </td>
           <CompareCell value={row.free} />
           <CompareCell value={row.basic} />
           <CompareCell value={row.pro} highlight />
@@ -781,10 +1183,18 @@ function FragmentGroup({
   );
 }
 
-function CompareCell({ value, highlight = false }: { value: CompareValue; highlight?: boolean }) {
+function CompareCell({
+  value,
+  highlight = false,
+}: {
+  value: CompareValue;
+  highlight?: boolean;
+}) {
   if (typeof value === "boolean") {
     return (
-      <td className={`border-t border-[#eee8ff] px-5 py-4 text-center ${highlight ? "bg-[#fffdf2]" : ""}`}>
+      <td
+        className={`border-t border-[#eee8ff] px-5 py-4 text-center ${highlight ? "bg-[#fffdf2]" : ""}`}
+      >
         {value ? (
           <span className="inline-grid h-7 w-7 place-items-center rounded-full bg-[#ecfdf3] text-[#17b26a]">
             <Check className="h-4 w-4" />
@@ -799,7 +1209,9 @@ function CompareCell({ value, highlight = false }: { value: CompareValue; highli
   }
 
   return (
-    <td className={`border-t border-[#eee8ff] px-5 py-4 text-center font-semibold text-[#4d3c75] ${highlight ? "bg-[#fffdf2]" : ""}`}>
+    <td
+      className={`border-t border-[#eee8ff] px-5 py-4 text-center font-semibold text-[#4d3c75] ${highlight ? "bg-[#fffdf2]" : ""}`}
+    >
       {value}
     </td>
   );
@@ -813,12 +1225,17 @@ function PricingFaq() {
           <div className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-[#725a00] shadow-[0_12px_35px_rgba(33,16,74,.06)]">
             <HelpCircle className="h-4 w-4 text-[#ffcb05]" /> Câu hỏi thường gặp
           </div>
-          <h2 className="mt-4 text-2xl font-black text-[#21104a] md:text-3xl">Giải đáp trước khi mua gói</h2>
+          <h2 className="mt-4 text-2xl font-black text-[#21104a] md:text-3xl">
+            Giải đáp trước khi mua gói
+          </h2>
         </div>
 
         <div className="mt-10 space-y-4">
           {faqs.map((item) => (
-            <details key={item.q} className="group rounded-xl border border-[#eee4d3] bg-white p-4 shadow-[0_10px_32px_rgba(33,16,74,.05)]">
+            <details
+              key={item.q}
+              className="group rounded-xl border border-[#eee4d3] bg-white p-4 shadow-[0_10px_32px_rgba(33,16,74,.05)]"
+            >
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-black text-[#21104a]">
                 <span>{item.q}</span>
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#f7f3ff] text-[#21104a] transition group-open:rotate-180">
@@ -838,13 +1255,14 @@ function EnterpriseCta({ onStart }: { onStart: () => void }) {
   return (
     <section id="enterprise" className="bg-white px-4 py-12 md:px-6 md:py-14">
       <div className="mx-auto grid max-w-7xl overflow-hidden rounded-2xl bg-[#21104a] text-white shadow-[0_20px_70px_rgba(33,16,74,.18)] lg:grid-cols-[1.05fr_.95fr]">
-        <div className="relative p-6 md:p-8 lg:p-10">
-          <div className="absolute -left-16 -top-16 h-48 w-48 rounded-full bg-[#ffcb05]/20 blur-3xl" />
-          <div className="relative">
+        <div className="p-6 md:p-8 lg:p-10">
+          <div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-wide text-[#ffcb05]">
               <Headphones className="h-4 w-4" /> Tư vấn gói phù hợp
             </div>
-            <h2 className="mt-5 text-2xl font-black leading-tight md:text-3xl">Doanh nghiệp cần số phút lớn hoặc tích hợp API?</h2>
+            <h2 className="mt-5 text-2xl font-black leading-tight md:text-3xl">
+              Doanh nghiệp cần số phút lớn hoặc tích hợp API?
+            </h2>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-white/70">
               Vbee hỗ trợ tư vấn gói riêng cho đội nhóm có nhu cầu xử lý số phút
               lớn, tích hợp API hoặc yêu cầu vận hành đặc thù.
@@ -857,7 +1275,10 @@ function EnterpriseCta({ onStart }: { onStart: () => void }) {
               ].map(([Icon, label]) => {
                 const TypedIcon = Icon as typeof Zap;
                 return (
-                  <div key={String(label)} className="rounded-2xl border border-white/10 bg-white/[0.07] p-4">
+                  <div
+                    key={String(label)}
+                    className="rounded-2xl border border-white/10 bg-white/[0.07] p-4"
+                  >
                     <TypedIcon className="h-5 w-5 text-[#ffcb05]" />
                     <p className="mt-3 text-sm font-black">{label as string}</p>
                   </div>
@@ -870,16 +1291,34 @@ function EnterpriseCta({ onStart }: { onStart: () => void }) {
         <div className="bg-white p-5 text-[#21104a] md:p-6 lg:p-8">
           <div className="rounded-xl border border-[#eee8ff] bg-[#fbf8ef] p-5">
             <h3 className="text-2xl font-black">Nhận tư vấn bảng giá</h3>
-            <p className="mt-2 text-sm leading-6 text-[#6a5a8f]">Để lại thông tin để Vbee tư vấn gói cước phù hợp với nhu cầu sử dụng.</p>
+            <p className="mt-2 text-sm leading-6 text-[#6a5a8f]">
+              Để lại thông tin để Vbee tư vấn gói cước phù hợp với nhu cầu sử
+              dụng.
+            </p>
             <div className="mt-5 space-y-3">
-              <input className="w-full rounded-2xl border border-[#e8decc] bg-white px-4 py-3 text-sm font-semibold text-[#21104a] outline-none transition focus:border-[#ffcb05]" placeholder="Họ và tên" />
-              <input className="w-full rounded-2xl border border-[#e8decc] bg-white px-4 py-3 text-sm font-semibold text-[#21104a] outline-none transition focus:border-[#ffcb05]" placeholder="Email hoặc số điện thoại" />
-              <textarea className="min-h-28 w-full rounded-2xl border border-[#e8decc] bg-white px-4 py-3 text-sm font-semibold text-[#21104a] outline-none transition focus:border-[#ffcb05]" placeholder="Nhu cầu xử lý mỗi tháng/năm" />
+              <input
+                className="w-full rounded-2xl border border-[#e8decc] bg-white px-4 py-3 text-sm font-semibold text-[#21104a] outline-none transition focus:border-[#ffcb05]"
+                placeholder="Họ và tên"
+              />
+              <input
+                className="w-full rounded-2xl border border-[#e8decc] bg-white px-4 py-3 text-sm font-semibold text-[#21104a] outline-none transition focus:border-[#ffcb05]"
+                placeholder="Email hoặc số điện thoại"
+              />
+              <textarea
+                className="min-h-28 w-full rounded-2xl border border-[#e8decc] bg-white px-4 py-3 text-sm font-semibold text-[#21104a] outline-none transition focus:border-[#ffcb05]"
+                placeholder="Nhu cầu xử lý mỗi tháng/năm"
+              />
             </div>
-            <button onClick={onStart} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#ffcb05] px-6 py-3 font-black text-[#21104a] transition hover:bg-[#ffd842]">
+            <button
+              onClick={onStart}
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#ffcb05] px-6 py-3 font-black text-[#21104a] transition hover:bg-[#ffd842]"
+            >
               Gửi yêu cầu tư vấn <ArrowRight className="h-4 w-4" />
             </button>
-            <a href="mailto:vbee@gmail.com" className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-[#6a5a8f] hover:text-[#21104a]">
+            <a
+              href="mailto:vbee@gmail.com"
+              className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-[#6a5a8f] hover:text-[#21104a]"
+            >
               <Mail className="h-4 w-4" /> vbee@gmail.com
             </a>
           </div>
@@ -894,23 +1333,40 @@ function PricingFooter() {
     <footer className="bg-[#21104a] px-4 py-12 text-white md:px-6">
       <div className="mx-auto grid max-w-7xl gap-10 md:grid-cols-[1.1fr_.9fr_.9fr_.9fr]">
         <div>
-          <img src={vbeeLogo} alt="Vbee" className="h-14 w-auto rounded-xl bg-white/95 p-1" />
-          <p className="mt-5 max-w-sm text-sm leading-7 text-white/65">Vbee AIVoice — bảng giá theo tháng và theo năm cho nền tảng speech-to-text.</p>
+          <img
+            src={vbeeLogo}
+            alt="Vbee"
+            className="h-14 w-auto rounded-xl bg-white/95 p-1"
+          />
+          <p className="mt-5 max-w-sm text-sm leading-7 text-white/65">
+            Vbee AIVoice — bảng giá theo tháng và theo năm cho nền tảng
+            speech-to-text.
+          </p>
         </div>
         {[
           ["Sản phẩm", ["Speech to Text", "Record", "History", "Export DOCX"]],
-          ["Bảng giá", ["Free", "Tiêu chuẩn", "Đặc biệt", "Business"]],
-          ["Liên hệ", ["vbee@gmail.com", "0916 168 475", "Vinh University", "Việt Nam"]],
+          [
+            "Bảng giá",
+            ["Theo lượt", "Tiêu chuẩn", "Đặc biệt", "Chuyên nghiệp"],
+          ],
+          [
+            "Liên hệ",
+            ["vbee@gmail.com", "0916 168 475", "Vinh University", "Việt Nam"],
+          ],
         ].map(([title, links]) => (
           <div key={String(title)}>
             <h3 className="font-black text-[#ffcb05]">{title}</h3>
             <div className="mt-4 space-y-3 text-sm text-white/65">
-              {(links as string[]).map((link) => <p key={link}>{link}</p>)}
+              {(links as string[]).map((link) => (
+                <p key={link}>{link}</p>
+              ))}
             </div>
           </div>
         ))}
       </div>
-      <div className="mx-auto mt-10 max-w-7xl border-t border-white/10 pt-6 text-sm text-white/50">© 2026 Vbee AIVoice. All rights reserved.</div>
+      <div className="mx-auto mt-10 max-w-7xl border-t border-white/10 pt-6 text-sm text-white/50">
+        © 2026 Vbee AIVoice. All rights reserved.
+      </div>
     </footer>
   );
 }
