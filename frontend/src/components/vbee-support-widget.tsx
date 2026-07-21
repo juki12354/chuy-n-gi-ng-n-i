@@ -27,7 +27,7 @@ type SupportView = "home" | "messages" | "chat" | "help";
 
 const HELP_QUESTIONS = [
   {
-    title: "Không upload được file",
+    title: "Không tải tệp lên được",
     answer:
       "Kiểm tra định dạng file, dung lượng tối đa theo gói và thời lượng còn lại. Nếu file quá dài, hãy cắt file hoặc nâng cấp gói.",
     icon: UploadCloud,
@@ -39,32 +39,32 @@ const HELP_QUESTIONS = [
     icon: Mic,
   },
   {
-    title: "Provider API lỗi 401",
+    title: "Lỗi API nhà cung cấp 401",
     answer:
-      "API key của provider không hợp lệ hoặc hết quyền. Kiểm tra file .env backend rồi khởi động lại server.",
+      "API key của nhà cung cấp không hợp lệ hoặc hết quyền. Kiểm tra file .env backend rồi khởi động lại server.",
     icon: AlertTriangle,
   },
   {
     title: "Mua gói nhưng chưa được cộng thời gian",
     answer:
-      "Vào trang checkout kiểm tra trạng thái đơn hàng. Nếu đã thanh toán, gửi ticket kèm email và mã đơn hàng.",
+      "Vào trang checkout kiểm tra trạng thái đơn hàng. Nếu đã thanh toán, gửi yêu cầu kèm email và mã đơn hàng.",
     icon: Wallet,
   },
   {
     title: "Không xuất được transcript",
     answer:
-      "Bạn cần xử lý xong transcript trước khi tải TXT/DOCX/SRT. Nếu transcript rỗng, hãy thử transcribe lại file.",
+      "Bạn cần xử lý xong transcript trước khi tải TXT/DOCX/SRT. Nếu transcript rỗng, hãy thử chuyển giọng nói lại cho tệp.",
     icon: MessageCircle,
   },
 ];
 
 const CATEGORY_OPTIONS = [
-  { value: "upload", label: "Upload file" },
+  { value: "upload", label: "Tải tệp lên" },
   { value: "record", label: "Ghi âm" },
   { value: "realtime", label: "Nói realtime" },
   { value: "quota", label: "Quota / gói cước" },
   { value: "payment", label: "Thanh toán" },
-  { value: "api", label: "API provider" },
+  { value: "api", label: "API nhà cung cấp" },
   { value: "general", label: "Khác" },
 ];
 
@@ -145,7 +145,7 @@ export function VbeeSupportWidget() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Không tải được ticket");
+          setError(err instanceof Error ? err.message : "Không tải được yêu cầu hỗ trợ");
         }
       } finally {
         if (!cancelled) setIsLoadingTickets(false);
@@ -294,7 +294,7 @@ function SupportHome({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 font-black">
             <MessageCircle className="h-5 w-5 text-[#ffcb05]" />
-            Vbee Support
+            Hỗ trợ Vbee
           </div>
           <button
             onClick={() => setOpen(false)}
@@ -416,7 +416,7 @@ function SupportMessages({
             <h3 className="mt-5 text-xl font-black">Bạn chưa đăng nhập</h3>
             <p className="mt-2 text-sm font-semibold leading-6 text-[#756894]">
               Bạn vẫn có thể gửi hỗ trợ bằng email, nhưng cần đăng nhập để xem
-              lại lịch sử ticket.
+              lại lịch sử yêu cầu.
             </p>
             <button
               onClick={() => setView("chat")}
@@ -427,14 +427,14 @@ function SupportMessages({
           </div>
         ) : isLoading ? (
           <p className="py-10 text-center text-sm font-bold text-[#756894]">
-            Đang tải ticket...
+            Đang tải yêu cầu hỗ trợ...
           </p>
         ) : tickets.length === 0 ? (
           <div className="flex min-h-[330px] flex-col items-center justify-center text-center">
             <Inbox className="h-10 w-10 text-[#756894]" />
             <h3 className="mt-5 text-xl font-black">Chưa có tin nhắn</h3>
             <p className="mt-2 text-sm font-semibold text-[#756894]">
-              Các ticket hỗ trợ của bạn sẽ hiển thị tại đây.
+              Các yêu cầu hỗ trợ của bạn sẽ hiển thị tại đây.
             </p>
             <button
               onClick={() => setView("chat")}
@@ -500,7 +500,7 @@ function SupportChatView({
       <SupportHeader title="Gửi hỗ trợ Vbee" setOpen={setOpen} />
       <div className="space-y-4 px-4 py-4">
         <p className="text-sm font-semibold leading-6 text-[#62557b]">
-          Mô tả vấn đề bạn đang gặp. Vbee sẽ lưu ticket kèm trang hiện tại,
+          Mô tả vấn đề bạn đang gặp. Vbee sẽ lưu yêu cầu kèm trang hiện tại,
           email và gói sử dụng để hỗ trợ nhanh hơn.
         </p>
 
@@ -543,7 +543,7 @@ function SupportChatView({
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             rows={5}
-            placeholder="Ví dụ: Tôi upload file mp3 nhưng báo Provider API lỗi 401..."
+            placeholder="Ví dụ: Tôi tải tệp mp3 lên nhưng báo lỗi API nhà cung cấp 401..."
             className="mt-2 w-full resize-none rounded-lg border border-[#eee8ff] bg-[#fbfaff] px-4 py-2.5 text-sm font-semibold leading-6 outline-none focus:border-[#ffcb05]"
           />
         </label>
@@ -589,7 +589,7 @@ function SupportHelp({
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Tìm lỗi upload, quota, API..."
+            placeholder="Tìm lỗi tải tệp, quota, API..."
             className="w-full bg-transparent text-sm font-semibold outline-none placeholder:text-[#9b94a8]"
           />
         </div>
@@ -615,7 +615,7 @@ function SupportHelp({
           onClick={() => setView("chat")}
           className="mt-5 w-full rounded-full bg-[#21104a] px-5 py-3 text-sm font-black text-white"
         >
-          Không tìm thấy câu trả lời? Gửi ticket
+          Không tìm thấy câu trả lời? Gửi yêu cầu
         </button>
       </div>
     </>

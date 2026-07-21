@@ -895,12 +895,12 @@ function PricingFooter() {
       <div className="mx-auto grid max-w-7xl gap-10 md:grid-cols-[1.1fr_.9fr_.9fr_.9fr]">
         <div>
           <img src={vbeeLogo} alt="Vbee" className="h-14 w-auto rounded-xl bg-white/95 p-1" />
-          <p className="mt-5 max-w-sm text-sm leading-7 text-white/65">Vbee AIVoice — bảng giá theo tháng và theo năm cho nền tảng speech-to-text.</p>
+          <p className="mt-5 max-w-sm text-sm leading-7 text-white/65">Vbee AIVoice — bảng giá theo tháng và theo năm cho nền tảng chuyển giọng nói thành văn bản.</p>
         </div>
         {[
-          ["Sản phẩm", ["Speech to Text", "Record", "History", "Export DOCX"]],
-          ["Bảng giá", ["Free", "Tiêu chuẩn", "Đặc biệt", "Business"]],
-          ["Liên hệ", ["vbee@gmail.com", "0916 168 475", "Vinh University", "Việt Nam"]],
+          ["Sản phẩm", ["Chuyển giọng nói thành văn bản", "Ghi âm", "Lịch sử", "Xuất DOCX"]],
+          ["Bảng giá", ["Miễn phí", "Tiêu chuẩn", "Đặc biệt", "Doanh nghiệp"]],
+          ["Liên hệ", ["vbee@gmail.com", "0916 168 475", "Đại học Vinh", "Việt Nam"]],
         ].map(([title, links]) => (
           <div key={String(title)}>
             <h3 className="font-black text-[#ffcb05]">{title}</h3>
@@ -910,7 +910,7 @@ function PricingFooter() {
           </div>
         ))}
       </div>
-      <div className="mx-auto mt-10 max-w-7xl border-t border-white/10 pt-6 text-sm text-white/50">© 2026 Vbee AIVoice. All rights reserved.</div>
+      <div className="mx-auto mt-10 max-w-7xl border-t border-white/10 pt-6 text-sm text-white/50">© 2026 Vbee AIVoice. Đã đăng ký bản quyền.</div>
     </footer>
   );
 }

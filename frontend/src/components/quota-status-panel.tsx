@@ -149,7 +149,7 @@ export function QuotaStatusPanel({
 
         <div className={`grid grid-cols-3 border-t border-[#eee7da] font-semibold text-[#756894] ${compact ? "mt-3 gap-2 pt-3 text-xs leading-4" : "mt-4 gap-3 pt-4 text-sm leading-5"}`}>
           <span>
-            Upload:
+            Tải lên:
             <br />
             {quota.limits.maxUploadMb}MB
           </span>
@@ -205,7 +205,7 @@ export function QuotaStatusPanel({
       {usageSummary}
 
       <div className="mt-3 grid gap-2 text-xs text-[#756894] sm:grid-cols-3">
-        <span>Upload: {quota.limits.maxUploadMb}MB</span>
+        <span>Tải lên: {quota.limits.maxUploadMb}MB</span>
         <span>Ghi âm: {formatQuotaTime(quota.limits.maxRecordSeconds)}</span>
         <span>File: {formatQuotaTime(quota.limits.maxFileSeconds)}</span>
       </div>

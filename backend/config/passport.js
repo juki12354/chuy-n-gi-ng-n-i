@@ -1,4 +1,4 @@
-require('dotenv').config();
+require("./env");
 const passport = require('passport');
 const { Strategy: GoogleStrategy } = require('passport-google-oauth20');
 

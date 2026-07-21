@@ -84,6 +84,13 @@ class JobQueue {
       .map((job) => this.serialize(job));
   }
 
+  listAll(limit = 100) {
+    return Array.from(this.jobs.values())
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, limit)
+      .map((job) => this.serialize(job));
+  }
+
   stats() {
     return {
       concurrency: this.concurrency,
@@ -162,7 +169,9 @@ class JobQueue {
     const now = Date.now();
     for (const [jobId, job] of this.jobs.entries()) {
       if (!["completed", "failed"].includes(job.status)) continue;
-      const finishedAt = job.finishedAt ? new Date(job.finishedAt).getTime() : now;
+      const finishedAt = job.finishedAt
+        ? new Date(job.finishedAt).getTime()
+        : now;
       if (now - finishedAt > this.retentionMs) {
         this.jobs.delete(jobId);
       }

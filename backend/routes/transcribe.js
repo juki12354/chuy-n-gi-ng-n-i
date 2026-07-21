@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("../config/env");
 const express = require("express");
 const multer = require("multer");
 const jwt = require("jsonwebtoken");

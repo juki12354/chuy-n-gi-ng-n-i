@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("../config/env");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -7,6 +7,7 @@ const { promisify } = require("util");
 const ffmpegStaticPath = require("ffmpeg-static");
 const { AssemblyAI } = require("assemblyai");
 const pool = require("../db");
+const { decryptProviderSecret } = require("./providerSecrets");
 const {
   normalizeLanguageCode,
   normalizeTranslateTarget,
@@ -45,6 +46,16 @@ const DEEPGRAM_RETRY_DELAY_MS = Number.parseInt(
   process.env.DEEPGRAM_RETRY_DELAY_MS || "2000",
   10,
 );
+const PROVIDER_ENV_KEYS = {
+  assemblyai: "ASSEMBLYAI_API_KEY",
+  sonix: "SONIX_API_KEY",
+  deepgram: "DEEPGRAM_API_KEY",
+};
+const PROVIDER_DEFAULT_ENDPOINTS = {
+  assemblyai: "https://api.assemblyai.com/v2",
+  sonix: SONIX_API_BASE_URL,
+  deepgram: DEEPGRAM_API_BASE_URL,
+};
 
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
@@ -279,54 +290,103 @@ async function prepareMusicAudioForStt(file, filename) {
   }
 }
 
-function getTranscriptionProvider() {
+function normalizeProviderCode(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function getEnvApiKey(provider) {
+  const envKey = PROVIDER_ENV_KEYS[provider];
+  return envKey ? String(process.env[envKey] || "").trim() : "";
+}
+
+function normalizeProviderEndpoint(provider, endpoint) {
+  return String(endpoint || PROVIDER_DEFAULT_ENDPOINTS[provider] || "")
+    .trim()
+    .replace(/\/$/, "");
+}
+
+async function getCmsTranscriptionProvider() {
+  try {
+    const { rows } = await pool.query(
+      `SELECT code, endpoint, api_key_encrypted
+       FROM stt_providers
+       WHERE enabled = TRUE AND is_default = TRUE
+       ORDER BY id ASC
+       LIMIT 1`,
+    );
+    const row = rows[0];
+    if (!row) return null;
+    const provider = normalizeProviderCode(row.code);
+    return {
+      provider,
+      endpoint: normalizeProviderEndpoint(provider, row.endpoint),
+      apiKey: decryptProviderSecret(row.api_key_encrypted) || getEnvApiKey(provider),
+      source: "cms",
+    };
+  } catch (error) {
+    console.warn(
+      "Không đọc được cấu hình provider từ CMS, fallback về .env:",
+      error.message,
+    );
+    return null;
+  }
+}
+
+async function getTranscriptionProviderConfig() {
+  const cmsProvider = await getCmsTranscriptionProvider();
+  if (cmsProvider) return cmsProvider;
+
   const configured = (process.env.TRANSCRIPTION_PROVIDER || "")
     .trim()
     .toLowerCase();
-  if (configured) return configured;
-  if (process.env.SONIX_API_KEY) return "sonix";
-  if (process.env.DEEPGRAM_API_KEY) return "deepgram";
-  return "assemblyai";
+  const provider =
+    configured ||
+    (process.env.SONIX_API_KEY
+      ? "sonix"
+      : process.env.DEEPGRAM_API_KEY
+        ? "deepgram"
+        : "assemblyai");
+  return {
+    provider,
+    endpoint: normalizeProviderEndpoint(provider),
+    apiKey: getEnvApiKey(provider),
+    source: "env",
+  };
+}
+
+async function getTranscriptionProvider() {
+  const { provider } = await getTranscriptionProviderConfig();
+  return provider;
 }
 
 function assertSupportedProvider(provider) {
   if (!["assemblyai", "sonix", "deepgram"].includes(provider)) {
     throw createHttpError(
       503,
-      `TRANSCRIPTION_PROVIDER không hợp lệ: ${provider}. Hỗ trợ: assemblyai, sonix hoặc deepgram.`,
+      `Nhà cung cấp STT không hợp lệ: ${provider}. Hỗ trợ: assemblyai, sonix hoặc deepgram.`,
     );
   }
 }
 
-function getAssemblyClient() {
-  if (!process.env.ASSEMBLYAI_API_KEY) {
+function requireProviderApiKey(provider, apiKey) {
+  if (!apiKey) {
+    const envKey = PROVIDER_ENV_KEYS[provider] || "API_KEY";
     throw createHttpError(
       503,
-      "Chưa cấu hình ASSEMBLYAI_API_KEY trong backend/.env",
+      `Chưa cấu hình API key cho provider ${provider}. Hãy nhập trong CMS hoặc biến ${envKey} trong backend/.env`,
     );
   }
-  return new AssemblyAI({ apiKey: process.env.ASSEMBLYAI_API_KEY });
+  return apiKey;
 }
 
-function getSonixApiKey() {
-  if (!process.env.SONIX_API_KEY) {
-    throw createHttpError(
-      503,
-      "Chưa cấu hình SONIX_API_KEY trong backend/.env",
-    );
-  }
-  return process.env.SONIX_API_KEY;
+function getAssemblyClient(providerConfig) {
+  return new AssemblyAI({
+    apiKey: requireProviderApiKey("assemblyai", providerConfig.apiKey),
+  });
 }
 
-function getDeepgramApiKey() {
-  if (!process.env.DEEPGRAM_API_KEY) {
-    throw createHttpError(
-      503,
-      "Chưa cấu hình DEEPGRAM_API_KEY trong backend/.env",
-    );
-  }
-  return process.env.DEEPGRAM_API_KEY;
-}
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -368,7 +428,7 @@ async function readResponseBody(response) {
   return text;
 }
 
-async function sonixRequest(pathname, options = {}) {
+async function sonixRequest(providerConfig, pathname, options = {}) {
   if (
     typeof fetch !== "function" ||
     typeof FormData !== "function" ||
@@ -381,11 +441,11 @@ async function sonixRequest(pathname, options = {}) {
   }
 
   const headers = {
-    Authorization: `Bearer ${getSonixApiKey()}`,
+    Authorization: `Bearer ${requireProviderApiKey("sonix", providerConfig.apiKey)}`,
     ...(options.headers || {}),
   };
 
-  const response = await fetch(`${SONIX_API_BASE_URL}${pathname}`, {
+  const response = await fetch(`${providerConfig.endpoint}${pathname}`, {
     ...options,
     headers,
   });
@@ -536,6 +596,7 @@ async function transcribeWithDeepgram({
   language,
   dictionaryKeywords = [],
   transcriptionSettings = {},
+  providerConfig,
 }) {
   if (typeof fetch !== "function") {
     throw createHttpError(503, "Deepgram provider cần Node.js 18+ để dùng fetch.");
@@ -587,10 +648,10 @@ async function transcribeWithDeepgram({
   for (let attempt = 0; attempt <= DEEPGRAM_MAX_RETRIES; attempt += 1) {
     const { controller, timer } = createAbortController(DEEPGRAM_TIMEOUT_MS);
     try {
-      const response = await fetch(`${DEEPGRAM_API_BASE_URL}/listen?${params}`, {
+      const response = await fetch(`${providerConfig.endpoint}/listen?${params}`, {
         method: "POST",
         headers: {
-          Authorization: `Token ${getDeepgramApiKey()}`,
+          Authorization: `Token ${requireProviderApiKey("deepgram", providerConfig.apiKey)}`,
           "Content-Type": file.mimetype || "application/octet-stream",
         },
         body: file.buffer,
@@ -655,7 +716,13 @@ function resolveSonixLanguage(language) {
     : selected;
 }
 
-async function submitSonixMedia(file, filename, language, dictionaryKeywords = []) {
+async function submitSonixMedia(
+  providerConfig,
+  file,
+  filename,
+  language,
+  dictionaryKeywords = [],
+) {
   if (file.size > SONIX_DIRECT_UPLOAD_MAX_MB * 1024 * 1024) {
     throw createHttpError(
       400,
@@ -686,19 +753,23 @@ async function submitSonixMedia(file, filename, language, dictionaryKeywords = [
   if (process.env.SONIX_CALLBACK_URL)
     form.append("callback_url", process.env.SONIX_CALLBACK_URL);
 
-  return sonixRequest("/media", {
+  return sonixRequest(providerConfig, "/media", {
     method: "POST",
     body: form,
   });
 }
 
-async function waitForSonixCompletion(mediaId) {
+async function waitForSonixCompletion(providerConfig, mediaId) {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < SONIX_TIMEOUT_MS) {
-    const media = await sonixRequest(`/media/${encodeURIComponent(mediaId)}`, {
-      method: "GET",
-    });
+    const media = await sonixRequest(
+      providerConfig,
+      `/media/${encodeURIComponent(mediaId)}`,
+      {
+        method: "GET",
+      },
+    );
 
     if (media.status === "completed") return media;
     if (["failed", "blocked"].includes(media.status)) {
@@ -762,8 +833,10 @@ async function transcribeWithSonix({
   filename,
   language,
   dictionaryKeywords = [],
+  providerConfig,
 }) {
   const uploadResult = await submitSonixMedia(
+    providerConfig,
     file,
     filename,
     language,
@@ -775,8 +848,9 @@ async function transcribeWithSonix({
     throw createHttpError(500, "Sonix không trả về media id sau khi upload.");
   }
 
-  const media = await waitForSonixCompletion(mediaId);
+  const media = await waitForSonixCompletion(providerConfig, mediaId);
   const jsonTranscript = await sonixRequest(
+    providerConfig,
     `/media/${encodeURIComponent(mediaId)}/transcript.json`,
     {
       method: "GET",
@@ -797,8 +871,8 @@ async function transcribeWithSonix({
   };
 }
 
-async function transcribeWithAssemblyAI({ file, speakerLabels }) {
-  const client = getAssemblyClient();
+async function transcribeWithAssemblyAI({ file, speakerLabels, providerConfig }) {
+  const client = getAssemblyClient(providerConfig);
   const transcript = await client.transcripts.transcribe({
     audio: file.buffer,
     language_detection: true,
@@ -843,7 +917,8 @@ async function transcribeAudio({
   dictionaryKeywords = [],
   transcriptionSettings = {},
 }) {
-  const provider = getTranscriptionProvider();
+  const providerConfig = await getTranscriptionProviderConfig();
+  const provider = providerConfig.provider;
   assertSupportedProvider(provider);
   const normalizedAudioMode = normalizeAudioMode(audioMode);
   const preprocessing =
@@ -859,6 +934,7 @@ async function transcribeAudio({
       filename: providerFile.originalname || filename,
       language,
       dictionaryKeywords,
+      providerConfig,
     });
     return {
       ...result,
@@ -876,6 +952,7 @@ async function transcribeAudio({
       language,
       dictionaryKeywords,
       transcriptionSettings,
+      providerConfig,
     });
     return {
       ...result,
@@ -886,7 +963,11 @@ async function transcribeAudio({
     };
   }
 
-  const result = await transcribeWithAssemblyAI({ file: providerFile, speakerLabels });
+  const result = await transcribeWithAssemblyAI({
+    file: providerFile,
+    speakerLabels,
+    providerConfig,
+  });
   return {
     ...result,
     audioMode: normalizedAudioMode,

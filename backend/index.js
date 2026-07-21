@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("./config/env");
 const express = require("express");
 const cors = require("cors");
 
@@ -11,6 +11,7 @@ const quotaRoutes = require("./routes/quota");
 const billingRoutes = require("./routes/billing");
 const settingsRoutes = require("./routes/settings");
 const supportRoutes = require("./routes/support");
+const adminRoutes = require("./routes/admin");
 const initDatabase = require("./initDb");
 const { getTranscriptionProvider } = require("./services/transcriptionService");
 const { transcriptionQueue } = require("./services/jobQueue");
@@ -34,6 +35,7 @@ app.use("/api/quota", quotaRoutes);
 app.use("/api/billing", billingRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/support", supportRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/v1", publicApiRoutes);
 
 app.get("/", (_req, res) => {
@@ -46,11 +48,11 @@ app.get("/", (_req, res) => {
   });
 });
 
-app.get("/api/health", (_req, res) => {
+app.get("/api/health", async (_req, res) => {
   res.json({
     status: "ok",
     message: "Backend đang chạy",
-    transcriptionProvider: getTranscriptionProvider(),
+    transcriptionProvider: await getTranscriptionProvider(),
     transcriptionQueue: transcriptionQueue.stats(),
   });
 });
@@ -59,8 +61,17 @@ const PORT = process.env.PORT || 3001;
 
 initDatabase()
   .then(() => {
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`Backend server đang chạy tại http://localhost:${PORT}`);
+    });
+    server.on("error", (error) => {
+      if (error.code === "EADDRINUSE") {
+        console.error(
+          `Port ${PORT} đang được sử dụng. Hãy dừng server cũ hoặc đổi PORT trong backend/.env.`,
+        );
+        process.exit(1);
+      }
+      throw error;
     });
   })
   .catch((error) => {

@@ -27,7 +27,7 @@ export const Route = createFileRoute("/support")({
       { title: "Trung tâm hỗ trợ Vbee" },
       {
         name: "description",
-        content: "Gửi yêu cầu hỗ trợ về upload, ghi âm, quota, thanh toán và API.",
+        content: "Gửi yêu cầu hỗ trợ về tải tệp, ghi âm, quota, thanh toán và API.",
       },
     ],
   }),
@@ -37,7 +37,7 @@ export const Route = createFileRoute("/support")({
 const QUICK_HELP = [
   {
     icon: UploadCloud,
-    title: "Không upload được file",
+    title: "Không tải tệp lên được",
     text: "Kiểm tra định dạng, dung lượng file và thời lượng còn lại của gói.",
   },
   {
@@ -61,7 +61,7 @@ function SupportPage() {
   const { user, token } = useAuth();
   const [email, setEmail] = useState(user?.email || "");
   const [phone, setPhone] = useState("");
-  const [platform, setPlatform] = useState("Web workspace");
+  const [platform, setPlatform] = useState("Không gian làm việc web");
   const [category, setCategory] = useState("upload");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
@@ -118,8 +118,8 @@ function SupportPage() {
             Vbee có thể hỗ trợ gì cho bạn?
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-white/72">
-            Gửi chi tiết vấn đề bạn gặp phải. Yêu cầu sẽ được tạo thành ticket
-            để theo dõi, thay vì một biểu mẫu không có trạng thái.
+            Gửi chi tiết vấn đề bạn gặp phải. Yêu cầu sẽ được tạo thành hồ sơ
+            để theo dõi trạng thái xử lý.
           </p>
         </div>
       </section>
@@ -144,8 +144,8 @@ function SupportPage() {
               <SupportField label="Số điện thoại" value={phone} onChange={setPhone} placeholder="Nhập số điện thoại" type="tel" />
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <SelectField label="Nền tảng" value={platform} onChange={setPlatform} options={["Web workspace", "Vbee API", "Ứng dụng nội bộ"]} />
-              <SelectField label="Danh mục" value={category} onChange={setCategory} options={["upload", "record", "realtime", "quota", "payment", "api", "general"]} labels={["Upload file", "Ghi âm", "Nói realtime", "Quota / gói cước", "Thanh toán", "API provider", "Khác"]} />
+              <SelectField label="Nền tảng" value={platform} onChange={setPlatform} options={["Không gian làm việc web", "Vbee API", "Ứng dụng nội bộ"]} />
+              <SelectField label="Danh mục" value={category} onChange={setCategory} options={["upload", "record", "realtime", "quota", "payment", "api", "general"]} labels={["Tải tệp lên", "Ghi âm", "Nói realtime", "Quota / gói cước", "Thanh toán", "API nhà cung cấp", "Khác"]} />
             </div>
             <div className="mt-4">
               <SupportField label="Tiêu đề *" value={subject} onChange={setSubject} placeholder="Tóm tắt vấn đề bạn gặp phải" />
@@ -184,7 +184,7 @@ function SupportPage() {
             <div className="rounded-2xl border border-[#e8e1f5] bg-[#21104a] p-5 text-white">
               <CircleHelp className="h-6 w-6 text-[#ffcb05]" />
               <h2 className="mt-4 text-lg font-black">Đã có tài khoản?</h2>
-              <p className="mt-2 text-sm leading-6 text-white/68">Bạn có thể xem những ticket đã gửi ở bảng hỗ trợ khi đăng nhập.</p>
+              <p className="mt-2 text-sm leading-6 text-white/68">Bạn có thể xem những yêu cầu đã gửi ở bảng hỗ trợ khi đăng nhập.</p>
               <Link to="/login" className="mt-5 inline-flex items-center gap-2 text-sm font-black text-[#ffcb05]">Đăng nhập <ChevronRight className="h-4 w-4" /></Link>
             </div>
           </aside>

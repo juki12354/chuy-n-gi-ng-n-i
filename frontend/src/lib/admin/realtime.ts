@@ -1,0 +1,2 @@
+export const ADMIN_JOB_REFRESH_MS = 3000;
+export const ADMIN_SUMMARY_REFRESH_MS = 5000;
