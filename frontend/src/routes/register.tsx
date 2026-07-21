@@ -7,20 +7,6 @@ import { Zap, Languages, CheckCircle2, ArrowRight, Eye, EyeOff } from "lucide-re
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:3001";
 
-// Chuyển URL-safe base64 về standard base64
-function decodeUrlSafeBase64(str: string): string {
-  const standard = str.replace(/-/g, "+").replace(/_/g, "/");
-  const pad = standard.length % 4;
-  return atob(pad > 0 ? standard + "=".repeat(4 - pad) : standard);
-}
-
-interface GoogleData {
-  googleId: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-}
-
 // Hạt sáng cố định (tránh SSR hydration mismatch)
 const SPARKLES = [
   { top: "7%",  left: "3%",  delay: 0,    size: "h-1.5 w-1.5" },
@@ -45,17 +31,16 @@ const FEATURES = [
 
 export const Route = createFileRoute("/register")({
   validateSearch: (search: Record<string, unknown>) => ({
-    data: search.data as string | undefined,
     from: search.from as string | undefined,
+    ref: typeof search.ref === "string" ? search.ref.slice(0, 32) : undefined,
   }),
   component: RegisterPage,
 });
 
 function RegisterPage() {
-  const { data: encodedData, from } = Route.useSearch();
+  const { from, ref } = Route.useSearch();
   const { user, isLoading, setToken } = useAuth();
 
-  const [googleData, setGoogleData] = useState<GoogleData | null>(null);
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", password: "", confirmPassword: "",
   });
@@ -68,23 +53,6 @@ function RegisterPage() {
     if (!isLoading && user) redirectAfterAuth(from);
   }, [user, isLoading, from]);
 
-  useEffect(() => {
-    if (!encodedData) return;
-
-    try {
-      const decoded = JSON.parse(decodeUrlSafeBase64(encodedData)) as GoogleData;
-      setGoogleData(decoded);
-      setForm((p) => ({
-        ...p,
-        email: decoded.email || p.email,
-        firstName: decoded.firstName || p.firstName,
-        lastName: decoded.lastName || p.lastName,
-      }));
-    } catch {
-      setError("Dữ liệu Google không hợp lệ. Bạn vẫn có thể đăng ký bằng email/password.");
-    }
-  }, [encodedData]);
-
   function handleChange(e: ChangeEvent<HTMLInputElement>) {
     setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
     setError("");
@@ -94,17 +62,18 @@ function RegisterPage() {
     e.preventDefault();
     setError("");
     if (form.password !== form.confirmPassword) { setError("Mật khẩu xác nhận không khớp"); return; }
-    if (form.password.length < 6) { setError("Mật khẩu phải có ít nhất 6 ký tự"); return; }
+    if (form.password.length < 12) { setError("Mật khẩu phải có ít nhất 12 ký tự"); return; }
 
     setIsSubmitting(true);
     try {
       const res  = await fetch(`${API_URL}/api/auth/register`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           firstName: form.firstName, lastName: form.lastName,
           email: form.email,        password: form.password,
-          googleId: googleData?.googleId ?? null,
+          referralCode: ref,
         }),
       });
       const data = (await res.json()) as { token?: string; error?: string };
@@ -118,6 +87,11 @@ function RegisterPage() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function handleGoogleRegister() {
+    const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
+    window.location.href = `${API_URL}/api/auth/google${query}`;
   }
 
   return (
@@ -213,19 +187,13 @@ function RegisterPage() {
             {/* Header form */}
             <div className="mb-6">
               <h2 className="text-2xl font-bold text-foreground">Tạo tài khoản</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Đăng ký bằng email/password hoặc hoàn tất tài khoản Google</p>
+              <p className="mt-1 text-sm text-muted-foreground">Đăng ký bằng email và mật khẩu an toàn</p>
             </div>
 
-            {/* Google linked banner */}
-            {googleData && (
-              <div className="mb-5 flex items-center gap-2.5 rounded-lg bg-[#fbf8ef] border border-border px-4 py-2.5 text-sm text-[#21104a]">
-                <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                </svg>
-                <span>Đã liên kết với tài khoản Google</span>
+            {ref && (
+              <div className="mb-5 rounded-xl border border-[#f0d66a] bg-[#fff9d7] px-4 py-3 text-sm text-[#4a356e]">
+                Bạn đang đăng ký bằng mã giới thiệu <strong>{ref}</strong>. Người
+                mời sẽ nhận 100 phút sau transcript đầu tiên của bạn.
               </div>
             )}
 
@@ -245,7 +213,7 @@ function RegisterPage() {
                     Tên <span className="text-destructive">*</span>
                   </label>
                   <input
-                    name="firstName" value={form.firstName} onChange={handleChange} required
+                    name="firstName" value={form.firstName} onChange={handleChange} required maxLength={100}
                     placeholder="Văn A"
                     className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/25 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                   />
@@ -255,7 +223,7 @@ function RegisterPage() {
                     Họ <span className="text-destructive">*</span>
                   </label>
                   <input
-                    name="lastName" value={form.lastName} onChange={handleChange} required
+                    name="lastName" value={form.lastName} onChange={handleChange} required maxLength={100}
                     placeholder="Nguyễn"
                     className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/25 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                   />
@@ -268,7 +236,7 @@ function RegisterPage() {
                   Địa chỉ email <span className="text-destructive">*</span>
                 </label>
                 <input
-                  name="email" type="email" value={form.email} onChange={handleChange} required
+                  name="email" type="email" value={form.email} onChange={handleChange} required maxLength={254}
                   placeholder="ban@example.com"
                   className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/25 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                 />
@@ -283,7 +251,8 @@ function RegisterPage() {
                   <input
                     name="password" type={showPassword ? "text" : "password"}
                     value={form.password} onChange={handleChange} required
-                    placeholder="Ít nhất 6 ký tự"
+                    minLength={12} maxLength={128}
+                    placeholder="Ít nhất 12 ký tự"
                     className="w-full rounded-xl border border-border bg-background px-3 py-2.5 pr-10 text-sm text-foreground placeholder:text-muted-foreground/25 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                   />
                   <button type="button" onClick={() => setShowPassword((v) => !v)}
@@ -303,6 +272,7 @@ function RegisterPage() {
                   <input
                     name="confirmPassword" type={showConfirm ? "text" : "password"}
                     value={form.confirmPassword} onChange={handleChange} required
+                    minLength={12} maxLength={128}
                     placeholder="Nhập lại mật khẩu"
                     className="w-full rounded-xl border border-border bg-background px-3 py-2.5 pr-10 text-sm text-foreground placeholder:text-muted-foreground/25 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                   />
@@ -329,6 +299,17 @@ function RegisterPage() {
                 )}
               </button>
             </form>
+
+            <button
+              type="button"
+              onClick={handleGoogleRegister}
+              className="mt-4 flex w-full items-center justify-center gap-3 rounded-full border border-border bg-white py-3 text-sm font-bold text-foreground transition hover:bg-[#f8f5ff]"
+            >
+              <span className="grid h-6 w-6 place-items-center rounded-full bg-[#fff3a6] font-black text-[#21104a]">
+                G
+              </span>
+              Đăng ký với Google
+            </button>
 
             {/* Divider trang trí */}
             <div className="mt-5 flex items-center gap-3">

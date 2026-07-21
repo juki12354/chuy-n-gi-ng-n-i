@@ -8,21 +8,93 @@ const {
   normalizeBillingCycle,
   normalizePlan,
 } = require("./quotaService");
+const {
+  createPaymentLink,
+  getPaymentLinkInformation,
+  verifyWebhook,
+} = require("./payosService");
 
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+const FRONTEND_URL = (process.env.FRONTEND_URL || "http://localhost:3000").replace(
+  /\/$/,
+  "",
+);
 const ORDER_TTL_MINUTES = Number.parseInt(
   process.env.BILLING_ORDER_TTL_MINUTES || "30",
   10,
 );
+const PAYMENT_PROVIDER = (process.env.PAYMENT_PROVIDER || "payos")
+  .trim()
+  .toLowerCase();
+const ENABLE_DEMO_PAYMENTS = process.env.ENABLE_DEMO_PAYMENTS === "true";
+const PAYOS_STATUS_CHECK_INTERVAL_SECONDS = Math.max(
+  4,
+  Number.parseInt(process.env.PAYOS_STATUS_CHECK_INTERVAL_SECONDS || "8", 10),
+);
 
 const PLAN_PRICES = {
   standard: {
-    monthly: Number.parseInt(process.env.STANDARD_MONTHLY_PRICE_VND || "39000", 10),
-    yearly: Number.parseInt(process.env.STANDARD_YEARLY_PRICE_VND || "390000", 10),
+    monthly: Number.parseInt(process.env.STANDARD_MONTHLY_PRICE_VND || "150000", 10),
+    yearly: Number.parseInt(process.env.STANDARD_YEARLY_PRICE_VND || "1650000", 10),
   },
   special: {
-    monthly: Number.parseInt(process.env.SPECIAL_MONTHLY_PRICE_VND || "89000", 10),
-    yearly: Number.parseInt(process.env.SPECIAL_YEARLY_PRICE_VND || "890000", 10),
+    monthly: Number.parseInt(process.env.SPECIAL_MONTHLY_PRICE_VND || "449000", 10),
+    yearly: Number.parseInt(process.env.SPECIAL_YEARLY_PRICE_VND || "4939000", 10),
+  },
+  business: {
+    monthly: Number.parseInt(process.env.BUSINESS_MONTHLY_PRICE_VND || "799000", 10),
+    yearly: Number.parseInt(process.env.BUSINESS_YEARLY_PRICE_VND || "8789000", 10),
+  },
+};
+
+const TOP_UP_PRODUCTS = {
+  topup_1h: {
+    code: "topup_1h",
+    label: "Mua theo lượt 1 giờ",
+    quotaSeconds: 1 * 60 * 60,
+    price: Number.parseInt(process.env.TOPUP_1H_PRICE_VND || "39000", 10),
+    validDays: null,
+  },
+  topup_3h: {
+    code: "topup_3h",
+    label: "Mua theo lượt 3 giờ",
+    quotaSeconds: 3 * 60 * 60,
+    price: Number.parseInt(process.env.TOPUP_3H_PRICE_VND || "117000", 10),
+    validDays: null,
+  },
+  topup_5h: {
+    code: "topup_5h",
+    label: "Mua theo lượt 5 giờ",
+    quotaSeconds: 5 * 60 * 60,
+    price: Number.parseInt(process.env.TOPUP_5H_PRICE_VND || "195000", 10),
+    validDays: null,
+  },
+  topup_10h: {
+    code: "topup_10h",
+    label: "Mua theo lượt 10 giờ",
+    quotaSeconds: 10 * 60 * 60,
+    price: Number.parseInt(process.env.TOPUP_10H_PRICE_VND || "390000", 10),
+    validDays: null,
+  },
+  topup_20h: {
+    code: "topup_20h",
+    label: "Mua theo lượt 20 giờ",
+    quotaSeconds: 20 * 60 * 60,
+    price: Number.parseInt(process.env.TOPUP_20H_PRICE_VND || "780000", 10),
+    validDays: null,
+  },
+  topup_50h: {
+    code: "topup_50h",
+    label: "Mua theo lượt 50 giờ",
+    quotaSeconds: 50 * 60 * 60,
+    price: Number.parseInt(process.env.TOPUP_50H_PRICE_VND || "1950000", 10),
+    validDays: null,
+  },
+  topup_100h: {
+    code: "topup_100h",
+    label: "Mua theo lượt 100 giờ",
+    quotaSeconds: 100 * 60 * 60,
+    price: Number.parseInt(process.env.TOPUP_100H_PRICE_VND || "3900000", 10),
+    validDays: null,
   },
 };
 
@@ -34,6 +106,8 @@ function getPlanPrice(plan, billingCycle) {
 
 function serializeOrder(row) {
   if (!row) return null;
+  const productType = row.product_type === "top_up" ? "top_up" : "subscription";
+  const topUp = productType === "top_up" ? TOP_UP_PRODUCTS[row.product_code] : null;
   const planName = normalizePlan(row.plan);
   const cycle = normalizeBillingCycle(row.billing_cycle);
   const config = PLAN_CONFIG[planName] || PLAN_CONFIG.free;
@@ -41,20 +115,73 @@ function serializeOrder(row) {
     id: row.id,
     userId: row.user_id,
     plan: planName,
-    label: config.label,
+    productType,
+    productCode: row.product_code || planName,
+    label: topUp?.label || config.label,
     billingCycle: cycle,
-    quotaSeconds: getPurchasedQuotaSeconds(planName, cycle),
+    quotaSeconds:
+      topUp?.quotaSeconds || getPurchasedQuotaSeconds(planName, cycle),
+    validDays: topUp ? topUp.validDays : cycle === "yearly" ? 365 : 30,
     amount: Number(row.amount || 0),
     currency: row.currency || "VND",
     status: row.status,
     provider: row.provider,
     providerOrderId: row.provider_order_id,
     paymentUrl: row.payment_url,
+    paymentCode: row.payment_code,
+    paymentQrCode: row.payment_qr_code,
+    paymentLinkId: row.payment_link_id,
+    paymentCheckedAt: row.payment_checked_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     paidAt: row.paid_at,
     expiresAt: row.expires_at,
   };
+}
+
+function normalizePaymentCode(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+function descriptionContainsPaymentCode(description, paymentCode) {
+  const normalizedCode = normalizePaymentCode(paymentCode);
+  return Boolean(
+    normalizedCode && normalizePaymentCode(description).includes(normalizedCode),
+  );
+}
+
+function createPayosOrderCode() {
+  // A 15-digit integer stays within JavaScript's safe integer range and PayOS orderCode constraints.
+  return Math.floor(Date.now() / 1000) * 100000 + crypto.randomInt(10000, 100000);
+}
+
+function createPaymentCode(orderCode) {
+  return `VBE${String(orderCode).slice(-10)}`;
+}
+
+function getProvider() {
+  if (PAYMENT_PROVIDER === "payos") return "payos";
+  if (PAYMENT_PROVIDER === "demo" && ENABLE_DEMO_PAYMENTS) return "demo";
+  throw createHttpError(
+    503,
+    "Cổng thanh toán chưa được cấu hình. Hãy đặt PAYMENT_PROVIDER=payos và thêm khóa PayOS vào backend/.env.",
+  );
+}
+
+function getCheckoutUrl(orderId, result) {
+  return `${FRONTEND_URL}/checkout/${orderId}?payment=${result}`;
+}
+
+function getPaymentLabel({ plan, cycle, productType, productCode }) {
+  if (productType === "top_up") {
+    return `${TOP_UP_PRODUCTS[productCode].label} Vbee`;
+  }
+  const config = PLAN_CONFIG[plan];
+  const cycleLabel = cycle === "yearly" ? "năm" : "tháng";
+  return `Gói ${config.label} Vbee ${cycleLabel}`;
 }
 
 function listPlans() {
@@ -69,70 +196,279 @@ function listPlans() {
       },
       yearly: {
         price: PLAN_PRICES[planName]?.yearly ?? null,
-        quotaSeconds: config.yearlyQuotaSeconds || config.quotaSeconds * 12,
+        quotaSeconds:
+          planName === "free"
+            ? config.quotaSeconds
+            : config.yearlyQuotaSeconds || config.quotaSeconds * 12,
       },
       limits: {
         maxUploadMb: config.maxUploadMb,
         maxRecordSeconds: config.maxRecordSeconds,
         maxFileSeconds: config.maxFileSeconds,
       },
+      queueWeight: config.queueWeight,
+      seats: config.seats,
+      retentionDays: config.retentionDays,
+      apiAccess: config.apiAccess,
     };
   });
+}
+
+function listTopUps() {
+  return Object.values(TOP_UP_PRODUCTS).map((product) => ({ ...product }));
+}
+
+async function createPendingOrder({
+  userId,
+  plan,
+  productType,
+  productCode,
+  billingCycle,
+  amount,
+  provider,
+}) {
+  const id = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + ORDER_TTL_MINUTES * 60 * 1000);
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const orderCode = provider === "payos" ? createPayosOrderCode() : crypto.randomUUID();
+    const paymentCode =
+      provider === "payos" ? createPaymentCode(orderCode) : `DEMO-${id.slice(0, 8)}`;
+
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO billing_orders (
+           id, user_id, plan, product_type, product_code, billing_cycle, amount, currency, status,
+           provider, provider_order_id, payment_code, raw_request, expires_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'VND', 'pending', $8, $9, $10, $11::jsonb, $12)
+         RETURNING *`,
+        [
+          id,
+          userId,
+          plan,
+          productType,
+          productCode,
+          billingCycle,
+          amount,
+          provider,
+          String(orderCode),
+          paymentCode,
+          JSON.stringify({
+            plan,
+            productType,
+            productCode,
+            billingCycle,
+            provider,
+            orderCode: String(orderCode),
+            paymentCode,
+          }),
+          expiresAt,
+        ],
+      );
+      return rows[0];
+    } catch (error) {
+      if (error.code !== "23505" || attempt === 2) throw error;
+    }
+  }
+
+  throw createHttpError(500, "Không thể tạo mã đơn hàng duy nhất");
 }
 
 async function createCheckoutOrder({
   userId,
   plan,
   billingCycle = "monthly",
-  provider = "demo",
+  productType = "subscription",
+  productCode = null,
 }) {
-  const planName = normalizePlan(plan);
+  const normalizedProductType = productType === "top_up" ? "top_up" : "subscription";
+  let planName = normalizePlan(plan);
   const cycle = normalizeBillingCycle(billingCycle);
-  const amount = getPlanPrice(planName, cycle);
-
-  if (planName === "free") {
-    throw createHttpError(400, "Gói Free không cần thanh toán");
+  const topUp =
+    normalizedProductType === "top_up" ? TOP_UP_PRODUCTS[productCode] : null;
+  if (normalizedProductType === "top_up") {
+    const currentPlan = await pool.query("SELECT plan FROM users WHERE id = $1", [userId]);
+    if (!currentPlan.rows[0]) throw createHttpError(404, "Không tìm thấy người dùng");
+    planName = normalizePlan(currentPlan.rows[0].plan);
   }
-  if (planName === "business") {
-    throw createHttpError(
-      400,
-      "Gói Business cần liên hệ tư vấn để cấu hình hợp đồng riêng",
-    );
+  const amount = topUp?.price ?? getPlanPrice(planName, cycle);
+
+  if (normalizedProductType === "top_up" && !topUp) {
+    throw createHttpError(400, "Gói mua thêm không hợp lệ");
+  }
+  if (normalizedProductType === "subscription" && planName === "free") {
+    throw createHttpError(400, "Gói Free không cần thanh toán");
   }
   if (amount === null) {
     throw createHttpError(400, "Gói cước không hợp lệ");
   }
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    throw createHttpError(503, "Giá gói cước trên server chưa được cấu hình hợp lệ");
+  }
 
-  const id = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + ORDER_TTL_MINUTES * 60 * 1000);
-  const providerOrderId = `${provider}_${id}`;
-  const paymentUrl = `${FRONTEND_URL}/checkout/${id}`;
+  const provider = getProvider();
+  const order = await createPendingOrder({
+    userId,
+    plan: planName,
+    productType: normalizedProductType,
+    productCode: topUp?.code || planName,
+    billingCycle: cycle,
+    amount,
+    provider,
+  });
 
-  const { rows } = await pool.query(
-    `INSERT INTO billing_orders (
-       id, user_id, plan, billing_cycle, amount, currency, status,
-       provider, provider_order_id, payment_url, raw_request, expires_at
-     )
-     VALUES ($1, $2, $3, $4, $5, 'VND', 'pending', $6, $7, $8, $9::jsonb, $10)
-     RETURNING *`,
-    [
-      id,
-      userId,
-      planName,
-      cycle,
+  if (provider === "demo") {
+    const paymentUrl = `${FRONTEND_URL}/checkout/${order.id}`;
+    const { rows } = await pool.query(
+      `UPDATE billing_orders SET payment_url = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [order.id, paymentUrl],
+    );
+    return { order: serializeOrder(rows[0]), paymentUrl };
+  }
+
+  try {
+    const paymentLink = await createPaymentLink({
+      orderCode: Number(order.provider_order_id),
       amount,
-      provider,
-      providerOrderId,
-      paymentUrl,
-      JSON.stringify({ plan: planName, billingCycle: cycle, provider }),
-      expiresAt,
-    ],
-  );
+      description: order.payment_code,
+      itemName: getPaymentLabel({
+        plan: planName,
+        cycle,
+        productType: normalizedProductType,
+        productCode: topUp?.code || planName,
+      }),
+      returnUrl: getCheckoutUrl(order.id, "return"),
+      cancelUrl: getCheckoutUrl(order.id, "cancel"),
+      expiresAt: new Date(order.expires_at),
+    });
+    const { rows } = await pool.query(
+      `UPDATE billing_orders
+       SET payment_url = $2,
+           payment_qr_code = $3,
+           payment_link_id = $4,
+           raw_request = raw_request || $5::jsonb,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [
+        order.id,
+        paymentLink.checkoutUrl || null,
+        paymentLink.qrCode || null,
+        paymentLink.paymentLinkId || null,
+        JSON.stringify({
+          payos: {
+            orderCode: String(order.provider_order_id),
+            paymentLinkId: paymentLink.paymentLinkId || null,
+            createdAt: new Date().toISOString(),
+          },
+        }),
+      ],
+    );
+    return { order: serializeOrder(rows[0]), paymentUrl: rows[0].payment_url };
+  } catch (error) {
+    await pool.query(
+      `UPDATE billing_orders
+       SET status = 'failed',
+           raw_request = raw_request || $2::jsonb,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [
+        order.id,
+        JSON.stringify({
+          payosError: error.message || "Không tạo được link thanh toán",
+          failedAt: new Date().toISOString(),
+        }),
+      ],
+    );
+    throw error;
+  }
+}
 
-  return {
-    order: serializeOrder(rows[0]),
-    paymentUrl,
-  };
+async function reconcilePayosOrder(row) {
+  if (!row || row.provider !== "payos" || row.status !== "pending") {
+    return serializeOrder(row);
+  }
+
+  const claim = await pool.query(
+    `UPDATE billing_orders
+     SET payment_checked_at = NOW()
+     WHERE id = $1
+       AND status = 'pending'
+       AND (
+         payment_checked_at IS NULL
+         OR payment_checked_at < NOW() - ($2 * INTERVAL '1 second')
+       )
+     RETURNING *`,
+    [row.id, PAYOS_STATUS_CHECK_INTERVAL_SECONDS],
+  );
+  const order = claim.rows[0];
+  if (!order) return serializeOrder(row);
+
+  const payment = await getPaymentLinkInformation(order.provider_order_id);
+  if (String(payment.orderCode) !== String(order.provider_order_id)) {
+    throw createHttpError(400, "Mã đơn PayOS không khớp với đơn hàng");
+  }
+  if (
+    order.payment_link_id &&
+    payment.id &&
+    String(payment.id) !== String(order.payment_link_id)
+  ) {
+    throw createHttpError(400, "Mã link PayOS không khớp với đơn hàng");
+  }
+  if (Number(payment.amount) !== Number(order.amount)) {
+    throw createHttpError(400, "Số tiền yêu cầu trên PayOS không khớp");
+  }
+  if (String(payment.status || "").toUpperCase() !== "PAID") {
+    return serializeOrder(order);
+  }
+  if (Number(payment.amountPaid || 0) < Number(order.amount)) {
+    throw createHttpError(400, "PayOS chưa ghi nhận đủ số tiền của đơn hàng");
+  }
+
+  const transactions = Array.isArray(payment.transactions)
+    ? payment.transactions
+    : [];
+  const matchingTransactions = transactions.filter((transaction) =>
+    descriptionContainsPaymentCode(transaction.description, order.payment_code),
+  );
+  if (matchingTransactions.length === 0) {
+    throw createHttpError(400, "Không tìm thấy đúng mã đơn trong giao dịch PayOS");
+  }
+
+  const matchedAmount = matchingTransactions.reduce(
+    (total, transaction) => total + Number(transaction.amount || 0),
+    0,
+  );
+  if (matchedAmount < Number(order.amount)) {
+    throw createHttpError(400, "Các giao dịch đúng mã đơn chưa thanh toán đủ tiền");
+  }
+
+  const transaction = matchingTransactions[0];
+  return completePaidOrder({
+    provider: "payos",
+    providerOrderId: order.provider_order_id,
+    amount: order.amount,
+    paymentCode: order.payment_code,
+    transactionId: transaction.reference || payment.id,
+    paidAt: transaction.transactionDateTime,
+    rawPayload: {
+      provider: "payos",
+      source: "status_reconciliation",
+      reconciledAt: new Date().toISOString(),
+      paymentLinkId: payment.id || null,
+      orderCode: payment.orderCode,
+      status: payment.status,
+      amount: payment.amount,
+      amountPaid: payment.amountPaid,
+      transaction: {
+        reference: transaction.reference || null,
+        amount: transaction.amount,
+        description: transaction.description,
+        transactionDateTime: transaction.transactionDateTime || null,
+      },
+    },
+  });
 }
 
 async function getOrderForUser(userId, orderId) {
@@ -141,7 +477,13 @@ async function getOrderForUser(userId, orderId) {
     [orderId, userId],
   );
   if (!rows[0]) throw createHttpError(404, "Không tìm thấy đơn hàng");
-  return serializeOrder(rows[0]);
+
+  try {
+    return await reconcilePayosOrder(rows[0]);
+  } catch (error) {
+    console.error(`PayOS reconciliation failed for order ${orderId}:`, error.message);
+    return serializeOrder(rows[0]);
+  }
 }
 
 async function listUserOrders(userId) {
@@ -155,68 +497,159 @@ async function listUserOrders(userId) {
   return rows.map(serializeOrder);
 }
 
-async function confirmDemoPayment({ userId, orderId }) {
+async function cancelActivePlan(userId) {
+  const { rows } = await pool.query(
+    `UPDATE users
+     SET plan_cancel_at_period_end = TRUE,
+         plan_cancellation_requested_at = NOW()
+     WHERE id = $1
+       AND plan <> 'free'
+       AND (plan_expires_at IS NULL OR plan_expires_at > NOW())
+     RETURNING id`,
+    [userId],
+  );
+  if (!rows[0]) {
+    throw createHttpError(400, "Tài khoản không có gói trả phí đang hoạt động");
+  }
+  return getQuotaStatus(userId);
+}
+
+async function resumeActivePlan(userId) {
+  const { rows } = await pool.query(
+    `UPDATE users
+     SET plan_cancel_at_period_end = FALSE,
+         plan_cancellation_requested_at = NULL
+     WHERE id = $1
+       AND plan <> 'free'
+       AND plan_cancel_at_period_end = TRUE
+       AND (plan_expires_at IS NULL OR plan_expires_at > NOW())
+     RETURNING id`,
+    [userId],
+  );
+  if (!rows[0]) {
+    throw createHttpError(400, "Gói cước không có yêu cầu hủy cần hoàn tác");
+  }
+  return getQuotaStatus(userId);
+}
+
+async function completePaidOrder({
+  provider,
+  providerOrderId,
+  amount,
+  paymentCode,
+  transactionId,
+  paidAt = null,
+  rawPayload,
+}) {
   const client = await pool.connect();
+  let transactionClosed = false;
   try {
     await client.query("BEGIN");
-
     const { rows } = await client.query(
       `SELECT * FROM billing_orders
-       WHERE id = $1 AND user_id = $2
+       WHERE provider = $1 AND provider_order_id = $2
        FOR UPDATE`,
-      [orderId, userId],
+      [provider, String(providerOrderId)],
     );
     const order = rows[0];
-    if (!order) throw createHttpError(404, "Không tìm thấy đơn hàng");
+    if (!order) throw createHttpError(404, "Không tìm thấy đơn hàng thanh toán");
 
     if (order.status === "paid") {
       await client.query("COMMIT");
-      return {
-        order: serializeOrder(order),
-        quota: await getQuotaStatus(userId),
-      };
+      transactionClosed = true;
+      return serializeOrder(order);
     }
 
     if (order.status !== "pending") {
       throw createHttpError(400, `Đơn hàng đang ở trạng thái ${order.status}`);
     }
 
-    if (order.expires_at && new Date(order.expires_at).getTime() < Date.now()) {
+    const paidAtDate = paidAt ? new Date(paidAt) : null;
+    const validPaidAt =
+      paidAtDate && !Number.isNaN(paidAtDate.getTime()) ? paidAtDate : null;
+    const expiresAt = order.expires_at ? new Date(order.expires_at) : null;
+    const paidBeforeExpiry =
+      validPaidAt &&
+      expiresAt &&
+      validPaidAt.getTime() <= expiresAt.getTime() + 5 * 60 * 1000;
+
+    if (expiresAt && expiresAt.getTime() < Date.now() && !paidBeforeExpiry) {
       await client.query(
-        `UPDATE billing_orders
-         SET status = 'expired', updated_at = NOW()
-         WHERE id = $1`,
-        [orderId],
+        `UPDATE billing_orders SET status = 'expired', updated_at = NOW() WHERE id = $1`,
+        [order.id],
       );
+      await client.query("COMMIT");
+      transactionClosed = true;
       throw createHttpError(400, "Đơn hàng đã hết hạn");
     }
 
+    if (!Number.isSafeInteger(Number(amount)) || Number(amount) !== Number(order.amount)) {
+      throw createHttpError(400, "Số tiền thanh toán không khớp với đơn hàng");
+    }
+
+    if (
+      order.payment_code &&
+      normalizePaymentCode(paymentCode) !== normalizePaymentCode(order.payment_code)
+    ) {
+      throw createHttpError(400, "Nội dung chuyển khoản không khớp với đơn hàng");
+    }
+
+    const productType = order.product_type === "top_up" ? "top_up" : "subscription";
     const planName = normalizePlan(order.plan);
     const cycle = normalizeBillingCycle(order.billing_cycle);
-    const quotaSeconds = getPurchasedQuotaSeconds(planName, cycle);
-    const planExpiresAt = new Date(
-      Date.now() + (cycle === "yearly" ? 365 : 30) * 24 * 60 * 60 * 1000,
-    );
-    const transactionId = `demo_txn_${crypto.randomUUID()}`;
 
-    await client.query(
-      `UPDATE users
-       SET plan = $1,
-           quota_seconds = $2,
-           plan_started_at = NOW(),
-           plan_expires_at = $3
-       WHERE id = $4`,
-      [planName, quotaSeconds, planExpiresAt, userId],
-    );
+    if (productType === "top_up") {
+      const topUp = TOP_UP_PRODUCTS[order.product_code];
+      if (!topUp) throw createHttpError(400, "Gói mua thêm không hợp lệ");
+      const creditStartsAt = validPaidAt || new Date();
+      const creditExpiresAt = topUp.validDays
+        ? new Date(
+            creditStartsAt.getTime() + topUp.validDays * 24 * 60 * 60 * 1000,
+          )
+        : null;
+      await client.query(
+        `INSERT INTO top_up_credits (
+           user_id, billing_order_id, product_code, seconds_granted,
+           remaining_seconds, starts_at, expires_at
+         )
+         VALUES ($1, $2, $3, $4, $4, $5, $6)
+         ON CONFLICT (billing_order_id) DO NOTHING`,
+        [
+          order.user_id,
+          order.id,
+          topUp.code,
+          topUp.quotaSeconds,
+          creditStartsAt,
+          creditExpiresAt,
+        ],
+      );
+    } else {
+      const quotaSeconds = getPurchasedQuotaSeconds(planName, cycle);
+      const planExpiresAt = new Date(
+        Date.now() + (cycle === "yearly" ? 365 : 30) * 24 * 60 * 60 * 1000,
+      );
+
+      await client.query(
+        `UPDATE users
+         SET plan = $1,
+             quota_seconds = $2,
+             plan_started_at = NOW(),
+             plan_expires_at = $3,
+             plan_cancel_at_period_end = FALSE,
+             plan_cancellation_requested_at = NULL
+         WHERE id = $4`,
+        [planName, quotaSeconds, planExpiresAt, order.user_id],
+      );
+    }
 
     const paidOrder = await client.query(
       `UPDATE billing_orders
        SET status = 'paid',
-           paid_at = NOW(),
+           paid_at = COALESCE($2::timestamptz, NOW()),
            updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
-      [orderId],
+      [order.id, validPaidAt ? validPaidAt.toISOString() : null],
     );
 
     await client.query(
@@ -224,40 +657,85 @@ async function confirmDemoPayment({ userId, orderId }) {
          order_id, provider, provider_transaction_id, amount,
          currency, status, raw_payload, paid_at
        )
-       VALUES ($1, $2, $3, $4, $5, 'paid', $6::jsonb, NOW())`,
+       VALUES (
+         $1, $2, $3, $4, $5, 'paid', $6::jsonb,
+         COALESCE($7::timestamptz, NOW())
+       )`,
       [
-        orderId,
-        order.provider,
-        transactionId,
+        order.id,
+        provider,
+        transactionId || null,
         order.amount,
         order.currency,
-        JSON.stringify({
-          provider: "demo",
-          orderId,
-          transactionId,
-          paidAt: new Date().toISOString(),
-        }),
+        JSON.stringify(rawPayload || {}),
+        validPaidAt ? validPaidAt.toISOString() : null,
       ],
     );
 
     await client.query("COMMIT");
-
-    return {
-      order: serializeOrder(paidOrder.rows[0]),
-      quota: await getQuotaStatus(userId),
-    };
+    transactionClosed = true;
+    return serializeOrder(paidOrder.rows[0]);
   } catch (error) {
-    await client.query("ROLLBACK");
+    if (!transactionClosed) await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();
   }
 }
 
+async function handlePayosWebhook(webhook) {
+  const data = verifyWebhook(webhook);
+  const order = await completePaidOrder({
+    provider: "payos",
+    providerOrderId: data.orderCode,
+    amount: data.amount,
+    paymentCode: data.description,
+    transactionId: data.reference || data.paymentLinkId,
+    paidAt: data.transactionDateTime,
+    rawPayload: {
+      provider: "payos",
+      receivedAt: new Date().toISOString(),
+      data,
+    },
+  });
+
+  return { order };
+}
+
+async function confirmDemoPayment({ userId, orderId }) {
+  if (!ENABLE_DEMO_PAYMENTS) {
+    throw createHttpError(404, "Thanh toán demo đã được tắt");
+  }
+
+  const order = await getOrderForUser(userId, orderId);
+  if (order.provider !== "demo") {
+    throw createHttpError(400, "Đơn hàng này không sử dụng thanh toán demo");
+  }
+
+  const paidOrder = await completePaidOrder({
+    provider: "demo",
+    providerOrderId: order.providerOrderId,
+    amount: order.amount,
+    paymentCode: order.paymentCode,
+    transactionId: `demo_txn_${crypto.randomUUID()}`,
+    rawPayload: {
+      provider: "demo",
+      orderId,
+      confirmedAt: new Date().toISOString(),
+    },
+  });
+
+  return { order: paidOrder, quota: await getQuotaStatus(userId) };
+}
+
 module.exports = {
+  cancelActivePlan,
   createCheckoutOrder,
   confirmDemoPayment,
   getOrderForUser,
+  handlePayosWebhook,
   listPlans,
+  listTopUps,
   listUserOrders,
+  resumeActivePlan,
 };

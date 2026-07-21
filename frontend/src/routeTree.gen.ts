@@ -12,14 +12,15 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadRouteImport } from './routes/upload'
 import { Route as TranscriptionSettingsRouteImport } from './routes/transcription-settings'
 import { Route as SupportRouteImport } from './routes/support'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ReferralRouteImport } from './routes/referral'
 import { Route as RecordRouteImport } from './routes/record'
 import { Route as RealtimeRouteImport } from './routes/realtime'
-import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HistoryRouteImport } from './routes/history'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CustomDictionaryRouteImport } from './routes/custom-dictionary'
 import { Route as ContactRouteImport } from './routes/contact'
@@ -55,6 +56,11 @@ const SupportRoute = SupportRouteImport.update({
   path: '/support',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
@@ -75,11 +81,6 @@ const RealtimeRoute = RealtimeRouteImport.update({
   path: '/realtime',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProfileRoute = ProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const PricingRoute = PricingRouteImport.update({
   id: '/pricing',
   path: '/pricing',
@@ -93,6 +94,11 @@ const LoginRoute = LoginRouteImport.update({
 const HistoryRoute = HistoryRouteImport.update({
   id: '/history',
   path: '/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -199,14 +205,15 @@ export interface FileRoutesByFullPath {
   '/contact': typeof ContactRoute
   '/custom-dictionary': typeof CustomDictionaryRoute
   '/dashboard': typeof DashboardRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
-  '/profile': typeof ProfileRoute
   '/realtime': typeof RealtimeRoute
   '/record': typeof RecordRoute
   '/referral': typeof ReferralRoute
   '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/support': typeof SupportRoute
   '/transcription-settings': typeof TranscriptionSettingsRoute
   '/upload': typeof UploadRoute
@@ -230,14 +237,15 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/custom-dictionary': typeof CustomDictionaryRoute
   '/dashboard': typeof DashboardRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
-  '/profile': typeof ProfileRoute
   '/realtime': typeof RealtimeRoute
   '/record': typeof RecordRoute
   '/referral': typeof ReferralRoute
   '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/support': typeof SupportRoute
   '/transcription-settings': typeof TranscriptionSettingsRoute
   '/upload': typeof UploadRoute
@@ -263,14 +271,15 @@ export interface FileRoutesById {
   '/contact': typeof ContactRoute
   '/custom-dictionary': typeof CustomDictionaryRoute
   '/dashboard': typeof DashboardRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
-  '/profile': typeof ProfileRoute
   '/realtime': typeof RealtimeRoute
   '/record': typeof RecordRoute
   '/referral': typeof ReferralRoute
   '/register': typeof RegisterRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/support': typeof SupportRoute
   '/transcription-settings': typeof TranscriptionSettingsRoute
   '/upload': typeof UploadRoute
@@ -297,14 +306,15 @@ export interface FileRouteTypes {
     | '/contact'
     | '/custom-dictionary'
     | '/dashboard'
+    | '/forgot-password'
     | '/history'
     | '/login'
     | '/pricing'
-    | '/profile'
     | '/realtime'
     | '/record'
     | '/referral'
     | '/register'
+    | '/reset-password'
     | '/support'
     | '/transcription-settings'
     | '/upload'
@@ -328,14 +338,15 @@ export interface FileRouteTypes {
     | '/contact'
     | '/custom-dictionary'
     | '/dashboard'
+    | '/forgot-password'
     | '/history'
     | '/login'
     | '/pricing'
-    | '/profile'
     | '/realtime'
     | '/record'
     | '/referral'
     | '/register'
+    | '/reset-password'
     | '/support'
     | '/transcription-settings'
     | '/upload'
@@ -360,14 +371,15 @@ export interface FileRouteTypes {
     | '/contact'
     | '/custom-dictionary'
     | '/dashboard'
+    | '/forgot-password'
     | '/history'
     | '/login'
     | '/pricing'
-    | '/profile'
     | '/realtime'
     | '/record'
     | '/referral'
     | '/register'
+    | '/reset-password'
     | '/support'
     | '/transcription-settings'
     | '/upload'
@@ -393,14 +405,15 @@ export interface RootRouteChildren {
   ContactRoute: typeof ContactRoute
   CustomDictionaryRoute: typeof CustomDictionaryRoute
   DashboardRoute: typeof DashboardRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   HistoryRoute: typeof HistoryRoute
   LoginRoute: typeof LoginRoute
   PricingRoute: typeof PricingRoute
-  ProfileRoute: typeof ProfileRoute
   RealtimeRoute: typeof RealtimeRoute
   RecordRoute: typeof RecordRoute
   ReferralRoute: typeof ReferralRoute
   RegisterRoute: typeof RegisterRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   SupportRoute: typeof SupportRoute
   TranscriptionSettingsRoute: typeof TranscriptionSettingsRoute
   UploadRoute: typeof UploadRoute
@@ -428,6 +441,13 @@ declare module '@tanstack/react-router' {
       path: '/support'
       fullPath: '/support'
       preLoaderRoute: typeof SupportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/register': {
@@ -458,13 +478,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RealtimeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/profile': {
-      id: '/profile'
-      path: '/profile'
-      fullPath: '/profile'
-      preLoaderRoute: typeof ProfileRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/pricing': {
       id: '/pricing'
       path: '/pricing'
@@ -484,6 +497,13 @@ declare module '@tanstack/react-router' {
       path: '/history'
       fullPath: '/history'
       preLoaderRoute: typeof HistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -660,14 +680,15 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRoute: ContactRoute,
   CustomDictionaryRoute: CustomDictionaryRoute,
   DashboardRoute: DashboardRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   HistoryRoute: HistoryRoute,
   LoginRoute: LoginRoute,
   PricingRoute: PricingRoute,
-  ProfileRoute: ProfileRoute,
   RealtimeRoute: RealtimeRoute,
   RecordRoute: RecordRoute,
   ReferralRoute: ReferralRoute,
   RegisterRoute: RegisterRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   SupportRoute: SupportRoute,
   TranscriptionSettingsRoute: TranscriptionSettingsRoute,
   UploadRoute: UploadRoute,

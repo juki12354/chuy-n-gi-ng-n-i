@@ -217,13 +217,13 @@ Luong chinh tham khao cac san pham transcription nhu Sonix, nhung copy va mau sa
 
 1. Vao landing page va hieu ngay gia tri chinh: chuyen giong noi thanh van ban AI.
 2. Bam CTA vao register/login.
-3. Sau khi dang nhap, trang upload phai hien quota va 3 hanh dong chinh: Upload, Record, Realtime.
+3. Sau khi dang nhap, dashboard phai hien quota va 3 hanh dong chinh: Upload, Record, Realtime.
 4. Neu chua co transcript, empty state phai goi y tai file dau tien hoac ghi am ngay.
 5. Sau khi xu ly xong, user duoc dua ve transcript co the copy/export/save.
 
 ### Returning user
 
-1. Vao trang upload va thay recent transcripts.
+1. Vao dashboard va thay recent transcripts.
 2. Co the mo lich su de tim transcript cu.
 3. Co the tao transcript moi bang upload/record/realtime.
 4. Quota panel luon cho biet con bao nhieu thoi gian.

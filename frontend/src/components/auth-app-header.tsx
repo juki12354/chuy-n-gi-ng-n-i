@@ -1,10 +1,13 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import {
+  AlertTriangle,
   History,
-  Home,
+  LayoutDashboard,
   LogOut,
   Menu,
   Mic,
+  Pencil,
   PlugZap,
   Radio,
   Upload,
@@ -12,6 +15,7 @@ import {
 } from "lucide-react";
 import { VbeeBrandLogo } from "@/components/vbee-brand-logo";
 import { useAuth } from "@/context/AuthContext";
+import { fetchQuota, formatQuotaTime, type QuotaStatus } from "@/lib/quota";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,11 +33,38 @@ const NAV_ITEMS = [
   { to: "/api", label: "API", icon: PlugZap },
 ] as const;
 
-export function AuthenticatedHeader() {
-  const { user, logout } = useAuth();
+type AuthenticatedHeaderProps = {
+  onEditProfile?: () => void;
+};
+
+export function AuthenticatedHeader({ onEditProfile }: AuthenticatedHeaderProps = {}) {
+  const { user, token, logout } = useAuth();
+  const [quota, setQuota] = useState<QuotaStatus | null>(null);
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
+
+  useEffect(() => {
+    if (!token) {
+      setQuota(null);
+      return;
+    }
+    let cancelled = false;
+    const loadQuota = async () => {
+      try {
+        const nextQuota = await fetchQuota(token);
+        if (!cancelled) setQuota(nextQuota);
+      } catch {
+        if (!cancelled) setQuota(null);
+      }
+    };
+    void loadQuota();
+    const timer = window.setInterval(() => void loadQuota(), 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [token, pathname]);
 
   if (!user) return null;
 
@@ -108,11 +139,23 @@ export function AuthenticatedHeader() {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild className="gap-2 cursor-pointer">
-                <Link to="/upload">
-                  <Home className="h-4 w-4 text-primary" />
-                  Trang chủ
+                <Link to="/dashboard">
+                  <LayoutDashboard className="h-4 w-4 text-[#21104a]" />
+                  Không gian làm việc
                 </Link>
               </DropdownMenuItem>
+              {onEditProfile && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="gap-2 cursor-pointer"
+                    onSelect={onEditProfile}
+                  >
+                    <Pencil className="h-4 w-4 text-[#21104a]" />
+                    Chỉnh sửa thông tin
+                  </DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="gap-2 cursor-pointer text-destructive hover:bg-destructive/10 focus:bg-destructive/10"
@@ -172,6 +215,26 @@ export function AuthenticatedHeader() {
           );
         })}
       </div>
+      {(quota?.shouldAlert || quota?.isLimitReached) && (
+        <div
+          role="status"
+          className={`border-t px-4 py-2 text-center text-xs font-bold ${
+            quota.isLimitReached
+              ? "border-red-200 bg-red-50 text-red-700"
+              : "border-[#ffcb05]/40 bg-[#fff8d7] text-[#21104a]"
+          }`}
+        >
+          <span className="inline-flex items-center gap-2">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {quota.isLimitReached
+              ? "Bạn đã hết thời lượng sử dụng."
+              : `Bạn chỉ còn ${formatQuotaTime(quota.remainingSeconds)} xử lý.`}
+            <Link to="/pricing" className="underline underline-offset-2">
+              Xem gói cước
+            </Link>
+          </span>
+        </div>
+      )}
     </header>
   );
 }

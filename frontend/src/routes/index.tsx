@@ -35,7 +35,10 @@ export const Route = createFileRoute("/")({
         content:
           "Workspace Vbee cho upload audio/video, ghi âm, realtime, quản lý transcript, dịch và gói cước.",
       },
-      { property: "og:title", content: "Vbee | Chuyển giọng nói thành văn bản" },
+      {
+        property: "og:title",
+        content: "Vbee | Chuyển giọng nói thành văn bản",
+      },
       {
         property: "og:description",
         content:
@@ -197,26 +200,33 @@ const workflow = [
 
 const plans = [
   {
-    name: "Free",
-    label: "Trải nghiệm",
-    price: "30 phút",
-    desc: "Cho khách hàng thử upload và ghi âm có giới hạn.",
-    points: ["Giới hạn file", "Quota có cảnh báo", "Lưu lịch sử cơ bản"],
+    name: "Theo lượt",
+    label: "Không thuê bao",
+    price: "39.000đ · 1 giờ",
+    desc: "Mua đúng số giờ cần dùng, thời lượng không hết hạn.",
+    points: ["Từ 1 đến 100 giờ", "Không phí duy trì", "Thanh toán qua PayOS"],
   },
   {
-    name: "Pro",
+    name: "Tiêu chuẩn",
+    label: "Cá nhân",
+    price: "150.000đ · 5 giờ",
+    desc: "Cho cá nhân, chuyên viên và công việc hằng tháng.",
+    points: ["File tối đa 2 giờ", "API / Webhook", "Queue 2×"],
+  },
+  {
+    name: "Đặc biệt",
     label: "Phổ biến",
-    price: "50 giờ",
-    desc: "Phù hợp đội nhóm và người dùng có nhu cầu xử lý thường xuyên.",
-    points: ["Xử lý file lớn", "Dịch transcript", "Xuất DOCX/SRT"],
+    price: "449.000đ · 20 giờ",
+    desc: "Cho người sáng tạo cần nhiều thời lượng và tốc độ hơn.",
+    points: ["File tối đa 4 giờ", "Lưu dữ liệu 1 năm", "Queue 4×"],
     featured: true,
   },
   {
-    name: "Business",
-    label: "Doanh nghiệp",
-    price: "Theo nhu cầu",
-    desc: "Dành cho đối tác cần API, quản trị và triển khai riêng.",
-    points: ["API token", "Quản lý người dùng", "Báo cáo sử dụng"],
+    name: "Chuyên nghiệp",
+    label: "Nâng cao",
+    price: "799.000đ · 40 giờ",
+    desc: "Dành cho chuyên gia cần API và ưu tiên xử lý cao nhất.",
+    points: ["File tối đa 8 giờ", "API / Webhook", "Queue 8×"],
   },
 ];
 
@@ -226,7 +236,7 @@ function LandingPage() {
 
   function startApp() {
     if (user) {
-      void navigate({ to: "/upload" });
+      void navigate({ to: "/dashboard" });
       return;
     }
     void navigate({
@@ -267,51 +277,72 @@ function Header({ onStart }: { onStart: () => void }) {
         </Link>
 
         <div className="hidden items-center gap-5 lg:flex">
-          {homeNavigation.map((group) => {
+          {homeNavigation.map((group, groupIndex) => {
             const isOpen = desktopOpenMenu === group.label;
+            const menuId = `home-navigation-${groupIndex}`;
 
             return (
-            <div key={group.label} className="group relative">
-              <button
-                type="button"
-                onClick={() => setDesktopOpenMenu((current) => current === group.label ? null : group.label)}
-                aria-expanded={isOpen}
-                aria-haspopup="menu"
-                className="inline-flex items-center gap-1 rounded-full px-2 py-2 text-sm font-black text-[#21104a] transition hover:text-[#6b5200]"
-              >
-                {group.label}
-                <ChevronDown className={`h-4 w-4 transition ${isOpen ? "rotate-180" : "group-hover:rotate-180"}`} />
-              </button>
               <div
-                role="menu"
-                className={`absolute left-0 top-full z-40 w-[320px] rounded-[1.5rem] border border-[#eee8ff] bg-white p-3 shadow-[0_24px_80px_rgba(33,16,74,.18)] transition ${
-                  isOpen
-                    ? "visible translate-y-2 opacity-100"
-                    : "invisible translate-y-3 opacity-0 group-hover:visible group-hover:translate-y-2 group-hover:opacity-100"
-                }`}
+                key={group.label}
+                className="group relative"
+                onMouseEnter={() => setDesktopOpenMenu(group.label)}
+                onMouseLeave={() => setDesktopOpenMenu(null)}
+                onBlur={(event) => {
+                  if (
+                    !event.currentTarget.contains(
+                      event.relatedTarget as Node | null,
+                    )
+                  ) {
+                    setDesktopOpenMenu(null);
+                  }
+                }}
               >
-                {group.items.map((item) => (
-                  <a
-                    key={item.title}
-                    href={item.href}
-                    onClick={() => setDesktopOpenMenu(null)}
-                    className="flex gap-3 rounded-2xl p-3 transition hover:bg-[#f8f5ff]"
-                  >
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#fff3a6] text-[#21104a]">
-                      <item.icon className="h-5 w-5" />
-                    </span>
-                    <span>
-                      <span className="block text-sm font-black text-[#21104a]">
-                        {item.title}
-                      </span>
-                      <span className="mt-0.5 block text-xs font-semibold leading-5 text-[#756894]">
-                        {item.desc}
-                      </span>
-                    </span>
-                  </a>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => setDesktopOpenMenu(group.label)}
+                  onFocus={() => setDesktopOpenMenu(group.label)}
+                  aria-expanded={isOpen}
+                  aria-haspopup="menu"
+                  aria-controls={menuId}
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-2 text-sm font-black text-[#21104a] transition hover:text-[#6b5200]"
+                >
+                  {group.label}
+                  <ChevronDown
+                    className={`h-4 w-4 transition ${isOpen ? "rotate-180" : "group-hover:rotate-180"}`}
+                  />
+                </button>
+                <div
+                  id={menuId}
+                  role="menu"
+                  className={`absolute left-0 top-full z-40 w-[320px] pt-2 transition-opacity ${
+                    isOpen ? "visible opacity-100" : "invisible opacity-0"
+                  }`}
+                >
+                  <div className="rounded-[1.5rem] border border-[#eee8ff] bg-white p-3 shadow-[0_24px_80px_rgba(33,16,74,.18)]">
+                    {group.items.map((item) => (
+                      <a
+                        key={item.title}
+                        href={item.href}
+                        role="menuitem"
+                        onClick={() => setDesktopOpenMenu(null)}
+                        className="flex gap-3 rounded-2xl p-3 transition hover:bg-[#f8f5ff] focus:bg-[#f8f5ff] focus:outline-none"
+                      >
+                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#fff3a6] text-[#21104a]">
+                          <item.icon className="h-5 w-5" />
+                        </span>
+                        <span>
+                          <span className="block text-sm font-black text-[#21104a]">
+                            {item.title}
+                          </span>
+                          <span className="mt-0.5 block text-xs font-semibold leading-5 text-[#756894]">
+                            {item.desc}
+                          </span>
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
             );
           })}
           <Link
@@ -342,7 +373,11 @@ function Header({ onStart }: { onStart: () => void }) {
           className="grid h-11 w-11 place-items-center rounded-full bg-[#f2f0f7] text-[#21104a] lg:hidden"
           aria-label="Mở menu"
         >
-          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          {mobileOpen ? (
+            <X className="h-5 w-5" />
+          ) : (
+            <Menu className="h-5 w-5" />
+          )}
         </button>
       </nav>
 
@@ -350,7 +385,10 @@ function Header({ onStart }: { onStart: () => void }) {
         <div className="border-t border-[#eee8ff] bg-white px-4 py-4 lg:hidden">
           <div className="space-y-3">
             {homeNavigation.map((group) => (
-              <details key={group.label} className="rounded-2xl bg-[#f8f5ff] p-3">
+              <details
+                key={group.label}
+                className="rounded-2xl bg-[#f8f5ff] p-3"
+              >
                 <summary className="flex cursor-pointer list-none items-center justify-between font-black text-[#21104a]">
                   {group.label} <ChevronDown className="h-4 w-4" />
                 </summary>
@@ -429,7 +467,9 @@ function Hero({ onStart }: { onStart: () => void }) {
                 <AudioLines className="h-5 w-5" />
               </span>
               <div>
-              <p className="text-sm font-black text-[#21104a]">Bản ghi đang xử lý</p>
+                <p className="text-sm font-black text-[#21104a]">
+                  Bản ghi đang xử lý
+                </p>
                 <p className="text-xs font-semibold text-[#756894]">
                   meeting-audio.mp3 · 18m 42s
                 </p>
@@ -442,16 +482,18 @@ function Hero({ onStart }: { onStart: () => void }) {
 
           <div className="grid md:grid-cols-[220px_1fr_220px]">
             <aside className="border-b border-[#eee8ff] bg-[#fbfaff] p-4 md:border-b-0 md:border-r">
-              {["Tải file", "Ghi âm", "Trực tiếp", "Lịch sử"].map((item, index) => (
-                <div
-                  key={item}
-                  className={`mb-2 rounded-2xl px-3 py-2 text-sm font-black ${
-                    index === 0 ? "bg-[#21104a] text-white" : "text-[#5d5077]"
-                  }`}
-                >
-                  {item}
-                </div>
-              ))}
+              {["Tải file", "Ghi âm", "Trực tiếp", "Lịch sử"].map(
+                (item, index) => (
+                  <div
+                    key={item}
+                    className={`mb-2 rounded-2xl px-3 py-2 text-sm font-black ${
+                      index === 0 ? "bg-[#21104a] text-white" : "text-[#5d5077]"
+                    }`}
+                  >
+                    {item}
+                  </div>
+                ),
+              )}
             </aside>
             <div className="p-4 md:p-5">
               <div className="space-y-3">
@@ -459,12 +501,26 @@ function Hero({ onStart }: { onStart: () => void }) {
                   ["00:04", "Hôm nay chúng ta tổng hợp tính năng chuyển giọng nói thành văn bản của Vbee."],
                   ["00:21", "Người dùng có thể tải file, ghi âm hoặc nói realtime."],
                   ["01:08", "Sau khi xử lý, transcript được lưu vào lịch sử để xuất file."],
+                  [
+                    "00:04",
+                    "Hôm nay chúng ta tổng hợp tính năng Vbee Speech to Text.",
+                  ],
+                  [
+                    "00:21",
+                    "Người dùng có thể tải file, ghi âm hoặc nói realtime.",
+                  ],
+                  [
+                    "01:08",
+                    "Sau khi xử lý, transcript được lưu vào lịch sử để xuất file.",
+                  ],
                 ].map(([time, text]) => (
                   <p
                     key={time}
                     className="rounded-2xl border border-[#eee8ff] bg-white px-4 py-3 text-sm font-semibold leading-6"
                   >
-                    <span className="mr-3 font-black text-[#21104a]">{time}</span>
+                    <span className="mr-3 font-black text-[#21104a]">
+                      {time}
+                    </span>
                     <span className="text-[#4d405f]">{text}</span>
                   </p>
                 ))}
@@ -528,7 +584,9 @@ function Features({ onStart }: { onStart: () => void }) {
               <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#21104a] text-[#ffcb05]">
                 <item.icon className="h-6 w-6" />
               </div>
-              <h3 className="mt-4 text-lg font-black text-[#21104a]">{item.title}</h3>
+              <h3 className="mt-4 text-lg font-black text-[#21104a]">
+                {item.title}
+              </h3>
               <p className="mt-2 text-sm font-semibold leading-7 text-[#6a5a8f]">
                 {item.desc}
               </p>
@@ -569,7 +627,10 @@ function WorkspacePreview({ onStart }: { onStart: () => void }) {
               "Nút hành động nổi bật giúp người dùng bắt đầu nhanh.",
               "Các tác vụ dịch, xuất file và quản lý transcript luôn dễ tìm.",
             ].map((point) => (
-              <div key={point} className="flex gap-3 text-sm font-bold leading-6 text-[#4d3c75]">
+              <div
+                key={point}
+                className="flex gap-3 text-sm font-bold leading-6 text-[#4d3c75]"
+              >
                 <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[#17b26a]" />
                 {point}
               </div>
@@ -599,9 +660,16 @@ function WorkspacePreview({ onStart }: { onStart: () => void }) {
                 ["Thời gian", "~4 phút"],
                 ["Xuất file", "DOCX/SRT"],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-2xl border border-[#eee8ff] bg-[#fbfaff] p-3">
-                  <p className="text-xs font-semibold text-[#756894]">{label}</p>
-                  <p className="mt-1 text-sm font-black text-[#21104a]">{value}</p>
+                <div
+                  key={label}
+                  className="rounded-2xl border border-[#eee8ff] bg-[#fbfaff] p-3"
+                >
+                  <p className="text-xs font-semibold text-[#756894]">
+                    {label}
+                  </p>
+                  <p className="mt-1 text-sm font-black text-[#21104a]">
+                    {value}
+                  </p>
                 </div>
               ))}
             </div>
@@ -630,12 +698,17 @@ function Workflow({ onStart }: { onStart: () => void }) {
         />
         <div className="mt-10 grid gap-4 md:grid-cols-4">
           {workflow.map((step, index) => (
-            <article key={step.title} className="rounded-2xl border border-white/10 bg-white/[0.07] p-5">
+            <article
+              key={step.title}
+              className="rounded-2xl border border-white/10 bg-white/[0.07] p-5"
+            >
               <div className="flex items-center justify-between">
                 <span className="grid h-11 w-11 place-items-center rounded-2xl bg-[#ffcb05] text-[#21104a]">
                   <step.icon className="h-5 w-5" />
                 </span>
-                <span className="text-sm font-black text-white/35">0{index + 1}</span>
+                <span className="text-sm font-black text-white/35">
+                  0{index + 1}
+                </span>
               </div>
               <h3 className="mt-4 text-lg font-black">{step.title}</h3>
               <p className="mt-2 text-sm font-semibold leading-7 text-white/68">
@@ -666,7 +739,7 @@ function Plans({ onStart }: { onStart: () => void }) {
           title="Gói cước rõ ràng theo nhu cầu sử dụng"
           desc="Người dùng có thể bắt đầu miễn phí, nâng cấp khi cần thêm thời lượng hoặc triển khai API cho doanh nghiệp."
         />
-        <div className="mt-10 grid gap-5 lg:grid-cols-3">
+        <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           {plans.map((plan) => (
             <article
               key={plan.name}
@@ -683,21 +756,34 @@ function Plans({ onStart }: { onStart: () => void }) {
               )}
               <span
                 className={`w-fit rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ${
-                  plan.featured ? "bg-white/10 text-[#ffcb05]" : "bg-[#fff7c2] text-[#725a00]"
+                  plan.featured
+                    ? "bg-white/10 text-[#ffcb05]"
+                    : "bg-[#fff7c2] text-[#725a00]"
                 }`}
               >
                 {plan.label}
               </span>
               <h3 className="mt-5 text-2xl font-black">{plan.name}</h3>
-              <p className="mt-3 text-2xl font-black tracking-tight">{plan.price}</p>
-              <p className={`mt-4 min-h-[56px] text-sm font-semibold leading-7 ${plan.featured ? "text-white/70" : "text-[#6a5a8f]"}`}>
+              <p className="mt-3 text-2xl font-black tracking-tight">
+                {plan.price}
+              </p>
+              <p
+                className={`mt-4 min-h-[56px] text-sm font-semibold leading-7 ${plan.featured ? "text-white/70" : "text-[#6a5a8f]"}`}
+              >
                 {plan.desc}
               </p>
               <div className="mt-6 space-y-3">
                 {plan.points.map((point) => (
-                  <div key={point} className="flex items-start gap-3 text-sm font-bold leading-6">
+                  <div
+                    key={point}
+                    className="flex items-start gap-3 text-sm font-bold leading-6"
+                  >
                     <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[#17b26a]" />
-                    <span className={plan.featured ? "text-white/78" : "text-[#4d3c75]"}>
+                    <span
+                      className={
+                        plan.featured ? "text-white/78" : "text-[#4d3c75]"
+                      }
+                    >
                       {point}
                     </span>
                   </div>
@@ -772,7 +858,11 @@ function Footer() {
     <footer className="bg-[#21104a] px-4 py-10 text-white md:px-6">
       <div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div>
-          <img src={vbeeLogo} alt="Vbee" className="h-14 w-auto rounded-xl bg-white p-2" />
+          <img
+            src={vbeeLogo}
+            alt="Vbee"
+            className="h-14 w-auto rounded-xl bg-white p-2"
+          />
           <p className="mt-4 max-w-sm text-sm font-semibold leading-7 text-white/65">
             Vbee AI Speech Workspace tập trung vào chuyển giọng nói thành văn bản, realtime,
             transcript, quota và gói cước trong một giao diện thống nhất.
@@ -782,6 +872,12 @@ function Footer() {
           ["Sản phẩm", ["Tải tệp lên", "Ghi âm", "Realtime", "Lịch sử"]],
           ["Hệ thống", ["API", "Quota", "Thanh toán", "Hỗ trợ"]],
           ["Liên hệ", ["contact@vbee.ai", "(+84) 249 999 3399", "Hà Nội, Việt Nam"]],
+          ["Sản phẩm", ["Upload", "Ghi âm", "Realtime", "History"]],
+          ["Hệ thống", ["API", "Quota", "Billing", "Support"]],
+          [
+            "Liên hệ",
+            ["contact@vbee.ai", "(+84) 249 999 3399", "Hà Nội, Việt Nam"],
+          ],
         ].map(([title, links]) => (
           <div key={String(title)}>
             <h3 className="text-sm font-black text-[#ffcb05]">{title}</h3>
@@ -794,7 +890,8 @@ function Footer() {
         ))}
       </div>
       <div className="mx-auto mt-8 max-w-7xl border-t border-white/12 pt-5 text-sm font-semibold text-white/45">
-        © 2026 Vbee AI Speech Workspace. Điều khoản dịch vụ · Chính sách bảo mật.
+        © 2026 Vbee AI Speech Workspace. Điều khoản dịch vụ · Chính sách bảo
+        mật.
       </div>
     </footer>
   );

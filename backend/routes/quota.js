@@ -1,6 +1,6 @@
 require("../config/env");
 const express = require("express");
-const jwt = require("jsonwebtoken");
+const { requireAuth } = require("../middleware/auth");
 const {
   getQuotaStatus,
   updateQuotaAlert,
@@ -8,22 +8,8 @@ const {
 } = require("../services/quotaService");
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
 
-function authMiddleware(req, res, next) {
-  const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Chưa đăng nhập" });
-  }
-  try {
-    req.user = jwt.verify(auth.split(" ")[1], JWT_SECRET);
-    next();
-  } catch {
-    return res.status(401).json({ error: "Token không hợp lệ" });
-  }
-}
-
-router.get("/", authMiddleware, async (req, res) => {
+router.get("/", requireAuth, async (req, res) => {
   try {
     return res.json(await getQuotaStatus(req.user.id));
   } catch (error) {
@@ -33,7 +19,7 @@ router.get("/", authMiddleware, async (req, res) => {
   }
 });
 
-router.patch("/alert", authMiddleware, async (req, res) => {
+router.patch("/alert", requireAuth, async (req, res) => {
   try {
     const minutes = Number(req.body.alertMinutes);
     const seconds = Number.isFinite(minutes)
@@ -48,7 +34,7 @@ router.patch("/alert", authMiddleware, async (req, res) => {
 });
 
 // Mock upgrade endpoint for local/dev flow. Replace with real payment webhook later.
-router.post("/upgrade", authMiddleware, async (req, res) => {
+router.post("/upgrade", requireAuth, async (req, res) => {
   if (process.env.ENABLE_DEV_QUOTA_UPGRADE !== "true") {
     return res.status(403).json({
       error:

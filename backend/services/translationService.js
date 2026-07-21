@@ -12,6 +12,14 @@ const MYMEMORY_BASE_URL = (
 ).replace(/\/$/, "");
 const GOOGLE_MAX_CHARS = 4500;
 const MYMEMORY_MAX_BYTES = 450;
+const TRANSLATION_REQUEST_TIMEOUT_MS = Math.max(
+  5_000,
+  Number.parseInt(process.env.TRANSLATION_REQUEST_TIMEOUT_MS || "30000", 10),
+);
+const MAX_TRANSLATION_CHARS = Math.max(
+  1_000,
+  Number.parseInt(process.env.MAX_TRANSLATION_CHARS || "200000", 10),
+);
 
 function createTranslationError(message, statusCode = 502) {
   const error = new Error(message);
@@ -156,6 +164,7 @@ async function translateWithGoogleCloud({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(TRANSLATION_REQUEST_TIMEOUT_MS),
   });
 
   const body = await response.json().catch(() => ({}));
@@ -215,6 +224,7 @@ async function translateWithLibreTranslate({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(TRANSLATION_REQUEST_TIMEOUT_MS),
   });
 
   const body = await response.json().catch(() => ({}));
@@ -250,6 +260,12 @@ async function translateWithMyMemory({
 
   const chunks = splitTextForMyMemory(text);
   if (chunks.length === 0) return null;
+  if (chunks.length > 100) {
+    throw createTranslationError(
+      "Transcript quá dài cho MyMemory. Hãy cấu hình Google Cloud Translation.",
+      413,
+    );
+  }
 
   const translatedChunks = [];
   for (const chunk of chunks) {
@@ -262,12 +278,22 @@ async function translateWithMyMemory({
       params.set("de", process.env.MYMEMORY_EMAIL);
     }
 
-    const response = await fetch(`${MYMEMORY_BASE_URL}/get?${params}`);
+    const response = await fetch(`${MYMEMORY_BASE_URL}/get?${params}`, {
+      signal: AbortSignal.timeout(TRANSLATION_REQUEST_TIMEOUT_MS),
+    });
     const body = await response.json().catch(() => ({}));
     if (!response.ok || Number(body.responseStatus || 200) >= 400) {
+      const providerMessage = String(
+        body.responseDetails || body.message || "",
+      );
+      if (/used all available free translations/i.test(providerMessage)) {
+        throw createTranslationError(
+          "MyMemory đã hết quota dịch miễn phí trong ngày. Vui lòng dùng AssemblyAI hoặc Google Cloud Translation.",
+          429,
+        );
+      }
       throw createTranslationError(
-        body.responseDetails ||
-          body.message ||
+        providerMessage ||
           `MyMemory dịch thất bại với mã ${response.status}`,
         response.status || 502,
       );
@@ -291,6 +317,12 @@ async function translateTranscript({
   targetLanguage,
 }) {
   if (!shouldTranslate({ text, sourceLanguage, targetLanguage })) return null;
+  if (String(text).length > MAX_TRANSLATION_CHARS) {
+    throw createTranslationError(
+      `Transcript vượt giới hạn dịch ${MAX_TRANSLATION_CHARS.toLocaleString("vi-VN")} ký tự.`,
+      413,
+    );
+  }
 
   const providerPreference = getProviderPreference();
   const shouldUseGoogle =

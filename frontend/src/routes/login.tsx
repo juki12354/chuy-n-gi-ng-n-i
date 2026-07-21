@@ -60,6 +60,7 @@ function LoginPage() {
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: form.email.trim(), password: form.password }),
       });
@@ -86,6 +87,7 @@ function LoginPage() {
 
   const errorMessages: Record<string, string> = {
     google_failed: "Đăng nhập Google thất bại. Vui lòng thử lại.",
+    google_email_exists: "Email này đã đăng ký bằng mật khẩu. Hãy đăng nhập bằng email để bảo vệ tài khoản.",
     google_not_configured: "Google OAuth chưa được cấu hình. Hãy dùng email/password hoặc điền GOOGLE_CLIENT_ID và GOOGLE_CLIENT_SECRET.",
     server_error: "Có lỗi xảy ra. Vui lòng thử lại sau.",
   };
@@ -114,7 +116,7 @@ function LoginPage() {
             Đăng nhập vào <span className="mt-1 block text-[#21104a]">Vbee AIVoice</span>
           </h1>
           <p className="mt-4 text-sm text-muted-foreground max-w-sm">
-            Dùng email/password để vào trang upload ngay. Google Login vẫn hỗ trợ khi bạn cấu hình OAuth.
+            Dùng email/password để vào dashboard ngay. Google Login vẫn hỗ trợ khi bạn cấu hình OAuth.
           </p>
 
           <div className="mt-6 grid w-full max-w-sm grid-cols-3 gap-2">
@@ -162,6 +164,7 @@ function LoginPage() {
                     value={form.email}
                     onChange={handleChange}
                     required
+                    maxLength={254}
                     placeholder="ban@example.com"
                     className="w-full rounded-xl border border-border bg-background px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/35 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                   />
@@ -169,7 +172,15 @@ function LoginPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Mật khẩu</label>
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <label className="block text-xs font-medium text-muted-foreground">Mật khẩu</label>
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs font-bold text-[#725a00] transition hover:text-[#21104a] hover:underline"
+                  >
+                    Quên mật khẩu?
+                  </Link>
+                </div>
                 <div className="relative">
                   <LockKeyhole className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
@@ -178,6 +189,7 @@ function LoginPage() {
                     value={form.password}
                     onChange={handleChange}
                     required
+                    maxLength={128}
                     placeholder="Nhập mật khẩu"
                     className="w-full rounded-xl border border-border bg-background px-10 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground/35 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
                   />
@@ -224,7 +236,7 @@ function LoginPage() {
 
             <p className="mt-4 text-center text-sm text-muted-foreground">
               Chưa có tài khoản?{" "}
-              <Link to="/register" search={{ data: undefined, from }} className="text-primary font-semibold hover:underline">
+              <Link to="/register" search={{ from, ref: undefined }} className="text-primary font-semibold hover:underline">
                 Tạo tài khoản mới
               </Link>
             </p>

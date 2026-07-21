@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -19,6 +19,22 @@ import {
   VbeePublicHeader,
 } from "@/components/vbee-public-chrome";
 import { useAuth } from "@/context/AuthContext";
+
+const API_URL =
+  (import.meta.env.VITE_API_URL as string | undefined) ??
+  "http://localhost:3001";
+
+type ReferralSummary = {
+  referralCode: string;
+  rewardMinutes: number;
+  rewardValidDays: number;
+  joinedCount: number;
+  pendingCount: number;
+  rewardedCount: number;
+  earnedMinutes: number;
+  availableMinutes: number;
+  nextExpiry: string | null;
+};
 
 export const Route = createFileRoute("/referral")({
   head: () => ({
@@ -64,12 +80,12 @@ const FAQS = [
   {
     question: "Người được mời nhận được gì?",
     answer:
-      "Người mới có thể bắt đầu với thời lượng dùng thử để upload, ghi âm hoặc dùng realtime.",
+      "Người mới nhận 30 phút dùng thử để upload, ghi âm hoặc dùng realtime.",
   },
   {
     question: "Khi nào thời lượng thưởng được cộng?",
     answer:
-      "Phần thưởng được cộng sau khi người được mời hoàn tất điều kiện của chương trình giới thiệu.",
+      "100 phút được cộng cho người mời sau khi người được mời hoàn thành transcript đầu tiên. Thời lượng thưởng có hiệu lực 90 ngày.",
   },
   {
     question: "Tôi xem lịch sử giới thiệu ở đâu?",
@@ -79,12 +95,65 @@ const FAQS = [
 ];
 
 function ReferralPage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [copied, setCopied] = useState(false);
   const [shared, setShared] = useState(false);
-  const referralCode = user
-    ? `VBEE-${String(user.id).padStart(6, "0")}`
-    : "VBEE-FRIEND";
+  const [summary, setSummary] = useState<ReferralSummary | null>(null);
+  const [summaryError, setSummaryError] = useState("");
+  const referralCode =
+    summary?.referralCode ||
+    (user ? `VBEE-${String(user.id).padStart(6, "0")}` : "VBEE-FRIEND");
+
+  useEffect(() => {
+    if (!token) {
+      setSummary(null);
+      return;
+    }
+
+    let active = true;
+    async function loadSummary() {
+      try {
+        const response = await fetch(`${API_URL}/api/referrals/me`, {
+          cache: "no-store",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = (await response.json()) as ReferralSummary & {
+          error?: string;
+        };
+        if (!response.ok) {
+          throw new Error(data.error || "Không tải được dữ liệu giới thiệu");
+        }
+        if (active) {
+          setSummary(data);
+          setSummaryError("");
+        }
+      } catch (error) {
+        if (active) {
+          setSummaryError(
+            error instanceof Error
+              ? error.message
+              : "Không tải được dữ liệu giới thiệu",
+          );
+        }
+      }
+    }
+
+    void loadSummary();
+    const refreshTimer = window.setInterval(() => {
+      void loadSummary();
+    }, 15_000);
+
+    function refreshOnFocus() {
+      void loadSummary();
+    }
+    window.addEventListener("focus", refreshOnFocus);
+
+    return () => {
+      active = false;
+      window.clearInterval(refreshTimer);
+      window.removeEventListener("focus", refreshOnFocus);
+    };
+  }, [token]);
 
   function invitationLink() {
     return `${window.location.origin}/register?ref=${referralCode}`;
@@ -159,6 +228,7 @@ function ReferralPage() {
             ) : (
               <Link
                 to="/register"
+                search={{ from: undefined, ref: undefined }}
                 className="mt-7 inline-flex items-center gap-2 rounded-full bg-[#ffcb05] px-5 py-3 text-sm font-black text-[#21104a] shadow-[0_14px_35px_rgba(255,203,5,.3)] transition hover:bg-[#ffdc45]"
               >
                 Tạo liên kết giới thiệu <ArrowRight className="h-4 w-4" />
@@ -177,22 +247,39 @@ function ReferralPage() {
                   <p className="mt-0.5 text-xs font-semibold text-[#756894]">Sẵn sàng chia sẻ cùng Vbee</p>
                 </div>
               </div>
-              <span className="rounded-full bg-[#fff8d7] px-3 py-1 text-xs font-black text-[#725a00]">100 phút</span>
+              <span className="rounded-full bg-[#fff8d7] px-3 py-1 text-xs font-black text-[#725a00]">
+                {summary?.rewardMinutes ?? 100} phút/lượt
+              </span>
             </div>
 
             <div className="mt-5 rounded-xl border border-[#e8decc] bg-[#fbf8ef] p-4">
               <p className="text-xs font-black text-[#756894]">Mã giới thiệu</p>
               <p className="mt-1 font-mono text-lg font-black text-[#21104a]">{referralCode}</p>
-              <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-[#ece6ff]">
-                <span className="h-full w-1/3 bg-[#ffcb05]" />
+              <div className="mt-4 flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-xs font-bold text-[#6a5a8f]">
+                <span>{summary?.pendingCount ?? 0} đang chờ</span>
+                <span>{summary?.rewardedCount ?? 0} đã nhận thưởng</span>
               </div>
               <p className="mt-2 text-xs leading-5 text-[#756894]">Mỗi lời mời đủ điều kiện sẽ mở thêm thời lượng cho tài khoản của bạn.</p>
+              {summaryError && (
+                <p className="mt-2 text-xs font-semibold text-red-600">
+                  {summaryError}
+                </p>
+              )}
             </div>
 
             <div className="mt-5 grid grid-cols-3 gap-3">
-              <ReferralMetric label="Đã gửi" value="0" />
-              <ReferralMetric label="Đã tham gia" value="0" />
-              <ReferralMetric label="Đã nhận" value="0 phút" />
+              <ReferralMetric
+                label="Đã tham gia"
+                value={String(summary?.joinedCount ?? 0)}
+              />
+              <ReferralMetric
+                label="Đã nhận"
+                value={`${summary?.earnedMinutes ?? 0} phút`}
+              />
+              <ReferralMetric
+                label="Còn hiệu lực"
+                value={`${summary?.availableMinutes ?? 0} phút`}
+              />
             </div>
           </div>
         </div>
@@ -202,7 +289,7 @@ function ReferralPage() {
         <div className="mx-auto max-w-7xl">
           <div className="max-w-2xl">
             <p className="text-xs font-black uppercase text-[#8a7100]">Ba bước đơn giản</p>
-            <h2 className="mt-3 text-2xl font-black md:text-3xl">Mời bạn bè, cùng nhận thưởng.</h2>
+            <h2 className="mt-3 text-2xl font-black md:text-3xl">Mời bạn bè, nhận thêm thời lượng.</h2>
             <p className="mt-3 text-sm leading-7 text-[#6a5a8f]">Luồng giới thiệu được thiết kế rõ ràng để cả người gửi và người nhận đều biết bước tiếp theo của mình.</p>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-3">
@@ -236,8 +323,8 @@ function ReferralPage() {
           <div className="rounded-2xl border border-[#e8e1f5] bg-white p-6 md:p-7">
             <p className="text-xs font-black uppercase text-[#8a7100]">Quyền lợi chương trình</p>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <Benefit title="Người gửi" text="Nhận thêm thời lượng sau khi lời mời đủ điều kiện." />
-              <Benefit title="Người nhận" text="Bắt đầu với tài khoản dùng thử và các tính năng cốt lõi." />
+              <Benefit title="Người gửi" text="Nhận 100 phút sau transcript đầu tiên của người được mời." />
+              <Benefit title="Người nhận" text="Bắt đầu với 30 phút dùng thử và các tính năng cốt lõi." />
               <Benefit title="Theo dõi rõ ràng" text="Xem mã giới thiệu và tiến độ lời mời ngay trong tài khoản." />
               <Benefit title="Dùng cho công việc" text="Dùng phần thưởng cho audio, video, ghi âm và realtime." />
             </div>
@@ -276,7 +363,11 @@ function ReferralPage() {
               <Send className="h-4 w-4" /> {copied ? "Đã sao chép" : "Gửi lời mời"}
             </button>
           ) : (
-            <Link to="/register" className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#21104a] px-5 py-3 text-sm font-black text-white transition hover:bg-[#32166f]">
+            <Link
+              to="/register"
+              search={{ from: undefined, ref: undefined }}
+              className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#21104a] px-5 py-3 text-sm font-black text-white transition hover:bg-[#32166f]"
+            >
               Đăng ký miễn phí <ArrowRight className="h-4 w-4" />
             </Link>
           )}

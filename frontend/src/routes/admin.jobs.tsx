@@ -149,7 +149,7 @@ function AdminJobsPage() {
             ))}
           </select>
           <button
-            onClick={load}
+            onClick={() => load()}
             className="rounded-md bg-[#21104a] px-3 py-2 text-sm font-black text-white"
           >
             Tải lại

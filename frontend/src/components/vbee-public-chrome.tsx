@@ -133,52 +133,69 @@ export function VbeePublicHeader() {
         </Link>
 
         <div className="hidden items-center gap-5 lg:flex">
-          {NAVIGATION.map((group) => {
+          {NAVIGATION.map((group, groupIndex) => {
             const isOpen = desktopOpenMenu === group.label;
+            const menuId = `public-navigation-${groupIndex}`;
 
             return (
-            <div key={group.label} className="group relative">
+            <div
+              key={group.label}
+              className="group relative"
+              onMouseEnter={() => setDesktopOpenMenu(group.label)}
+              onMouseLeave={() => setDesktopOpenMenu(null)}
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setDesktopOpenMenu(null);
+                }
+              }}
+            >
               <button
                 type="button"
-                onClick={() => setDesktopOpenMenu((current) => current === group.label ? null : group.label)}
+                onClick={() => setDesktopOpenMenu(group.label)}
+                onFocus={() => setDesktopOpenMenu(group.label)}
                 aria-expanded={isOpen}
                 aria-haspopup="menu"
+                aria-controls={menuId}
                 className="inline-flex items-center gap-1 rounded-full px-2 py-2 text-[13px] font-black text-[#21104a] transition hover:text-[#6b5200]"
               >
                 {group.label}
                 <ChevronDown className={`h-4 w-4 transition ${isOpen ? "rotate-180" : "group-hover:rotate-180"}`} />
               </button>
               <div
+                id={menuId}
                 role="menu"
-                className={`absolute left-0 top-full z-40 w-[320px] rounded-2xl border border-[#eee8ff] bg-white p-3 shadow-[0_24px_80px_rgba(33,16,74,.18)] transition ${
+                className={`absolute left-0 top-full z-40 w-[320px] pt-2 transition-opacity ${
                   isOpen
-                    ? "visible translate-y-2 opacity-100"
-                    : "invisible translate-y-3 opacity-0 group-hover:visible group-hover:translate-y-2 group-hover:opacity-100"
+                    ? "visible opacity-100"
+                    : "invisible opacity-0"
                 }`}
               >
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <a
-                      key={item.title}
-                      href={item.href}
-                      onClick={() => setDesktopOpenMenu(null)}
-                      className="flex gap-3 rounded-xl p-3 transition hover:bg-[#f8f5ff]"
-                    >
-                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#fff3a6] text-[#21104a]">
-                        <Icon className="h-5 w-5" />
-                      </span>
-                      <span>
-                        <span className="block text-sm font-black text-[#21104a]">
-                          {item.title}
+                <div className="rounded-2xl border border-[#eee8ff] bg-white p-3 shadow-[0_24px_80px_rgba(33,16,74,.18)]">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <a
+                        key={item.title}
+                        href={item.href}
+                        role="menuitem"
+                        onClick={() => setDesktopOpenMenu(null)}
+                        className="flex gap-3 rounded-xl p-3 transition hover:bg-[#f8f5ff] focus:bg-[#f8f5ff] focus:outline-none"
+                      >
+                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#fff3a6] text-[#21104a]">
+                          <Icon className="h-5 w-5" />
                         </span>
-                        <span className="mt-0.5 block text-xs font-semibold leading-5 text-[#756894]">
-                          {item.desc}
+                        <span>
+                          <span className="block text-sm font-black text-[#21104a]">
+                            {item.title}
+                          </span>
+                          <span className="mt-0.5 block text-xs font-semibold leading-5 text-[#756894]">
+                            {item.desc}
+                          </span>
                         </span>
-                      </span>
-                    </a>
-                  );
-                })}
+                      </a>
+                    );
+                  })}
+                </div>
               </div>
             </div>
             );

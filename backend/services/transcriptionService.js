@@ -8,6 +8,9 @@ const ffmpegStaticPath = require("ffmpeg-static");
 const { AssemblyAI } = require("assemblyai");
 const pool = require("../db");
 const { decryptProviderSecret } = require("./providerSecrets");
+const { recordQuotaUsage } = require("./quotaService");
+const { normalizeFilename } = require("./filenameEncoding");
+const { scanFileForMalware } = require("./malwareScanService");
 const {
   normalizeLanguageCode,
   normalizeTranslateTarget,
@@ -16,7 +19,9 @@ const {
 
 const ALLOWED_EXT = /\.(mp3|wav|m4a|ogg|flac|aac|mp4|webm)$/i;
 const MAX_SIZE_MB = Number.parseInt(process.env.MAX_UPLOAD_MB || "200", 10);
-const UPLOADS_DIR = path.join(__dirname, "..", "uploads");
+const UPLOADS_DIR = path.resolve(
+  process.env.UPLOADS_DIR || path.join(__dirname, "..", "uploads"),
+);
 const execFileAsync = promisify(execFile);
 
 const SONIX_API_BASE_URL = (
@@ -34,17 +39,9 @@ const SONIX_TIMEOUT_MS = Number.parseInt(
 const DEEPGRAM_API_BASE_URL = (
   process.env.DEEPGRAM_API_BASE_URL || "https://api.deepgram.com/v1"
 ).replace(/\/$/, "");
-const DEEPGRAM_TIMEOUT_MS = Number.parseInt(
-  process.env.DEEPGRAM_TIMEOUT_MS || `${10 * 60 * 1000}`,
-  10,
-);
-const DEEPGRAM_MAX_RETRIES = Number.parseInt(
-  process.env.DEEPGRAM_MAX_RETRIES || "2",
-  10,
-);
-const DEEPGRAM_RETRY_DELAY_MS = Number.parseInt(
-  process.env.DEEPGRAM_RETRY_DELAY_MS || "2000",
-  10,
+const PROVIDER_REQUEST_TIMEOUT_MS = Math.max(
+  30_000,
+  Number.parseInt(process.env.PROVIDER_REQUEST_TIMEOUT_MS || `${30 * 60 * 1000}`, 10),
 );
 const PROVIDER_ENV_KEYS = {
   assemblyai: "ASSEMBLYAI_API_KEY",
@@ -59,18 +56,21 @@ const PROVIDER_DEFAULT_ENDPOINTS = {
 
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
+function resolveStoredAudioPath(filename) {
+  const resolved = path.resolve(UPLOADS_DIR, String(filename || ""));
+  if (
+    !filename ||
+    (resolved !== UPLOADS_DIR && !resolved.startsWith(`${UPLOADS_DIR}${path.sep}`))
+  ) {
+    throw createHttpError(400, "Đường dẫn file âm thanh không hợp lệ");
+  }
+  return resolved;
+}
+
 function createHttpError(statusCode, message) {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
-}
-
-function normalizeFilename(originalname = "audio.webm") {
-  try {
-    return Buffer.from(originalname, "latin1").toString("utf8");
-  } catch {
-    return originalname;
-  }
 }
 
 function getSafeExtension(originalname = "") {
@@ -102,6 +102,90 @@ function safeUnlink(filePath) {
 
 function safeRmDir(dirPath) {
   if (dirPath) fs.rm(dirPath, { recursive: true, force: true }, () => {});
+}
+
+function parseMediaTime(value) {
+  const matches = [...String(value || "").matchAll(/(?:Duration:|time=)\s*(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/g)];
+  if (matches.length === 0) return null;
+  const match = matches[matches.length - 1];
+  const seconds =
+    Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : null;
+}
+
+async function runFfmpegInspection(args, timeout) {
+  try {
+    const result = await execFileAsync(getFfmpegPath(), args, {
+      timeout,
+      maxBuffer: 16 * 1024 * 1024,
+      windowsHide: true,
+    });
+    return `${result.stdout || ""}\n${result.stderr || ""}`;
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw createHttpError(503, "Server chưa cài đặt FFmpeg để kiểm tra file.");
+    }
+    return `${error.stdout || ""}\n${error.stderr || ""}`;
+  }
+}
+
+async function probeMediaFile(file) {
+  const sourcePath = file?.path ? path.resolve(file.path) : null;
+  if (!sourcePath && !file?.buffer?.length) {
+    throw createHttpError(400, "File tải lên rỗng hoặc không hợp lệ.");
+  }
+
+  const tempPath = sourcePath || path.join(
+      os.tmpdir(),
+      `vbee-probe-${Date.now()}-${Math.random().toString(36).slice(2)}.${getSafeExtension(file.originalname)}`,
+    );
+  const ownsTempFile = !sourcePath;
+  const timeout = Number.parseInt(
+    process.env.MEDIA_PROBE_TIMEOUT_MS || `${2 * 60 * 1000}`,
+    10,
+  );
+
+  try {
+    if (ownsTempFile) await fs.promises.writeFile(tempPath, file.buffer);
+    await scanFileForMalware(tempPath);
+    const metadata = await runFfmpegInspection(
+      ["-hide_banner", "-i", tempPath],
+      timeout,
+    );
+    if (!/Stream\s+#.*Audio:/i.test(metadata)) {
+      throw createHttpError(
+        400,
+        "File không có luồng âm thanh hợp lệ hoặc nội dung không đúng định dạng.",
+      );
+    }
+
+    let durationSeconds = parseMediaTime(metadata);
+    if (!durationSeconds) {
+      const packetScan = await runFfmpegInspection(
+        [
+          "-hide_banner",
+          "-i",
+          tempPath,
+          "-map",
+          "0:a:0",
+          "-c",
+          "copy",
+          "-f",
+          "null",
+          "-",
+        ],
+        timeout,
+      );
+      durationSeconds = parseMediaTime(packetScan);
+    }
+
+    if (!durationSeconds) {
+      throw createHttpError(400, "Không đọc được thời lượng thật của file.");
+    }
+    return { durationSeconds };
+  } finally {
+    if (ownsTempFile) await fs.promises.unlink(tempPath).catch(() => {});
+  }
 }
 
 function shouldAttemptDemucs() {
@@ -392,16 +476,6 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isRetryableProviderError(error) {
-  return [408, 429, 500, 502, 503, 504].includes(Number(error?.statusCode));
-}
-
-function createAbortController(timeoutMs) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  return { controller, timer };
-}
-
 async function readResponseBody(response) {
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
@@ -447,6 +521,7 @@ async function sonixRequest(providerConfig, pathname, options = {}) {
 
   const response = await fetch(`${providerConfig.endpoint}${pathname}`, {
     ...options,
+    signal: options.signal || AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
     headers,
   });
 
@@ -476,94 +551,6 @@ function normalizeDeepgramWords(response) {
         : null,
     confidence: word.confidence,
   }));
-}
-
-function normalizeSpeakerId(value) {
-  if (value === undefined || value === null || value === "") return null;
-  const text = String(value).trim();
-  return text || null;
-}
-
-function buildSegmentsFromWords(words = []) {
-  if (!Array.isArray(words) || words.length === 0) return [];
-
-  const segments = [];
-  let current = [];
-  let currentSpeaker = normalizeSpeakerId(words[0]?.speaker);
-
-  const pushCurrent = () => {
-    if (current.length === 0) return;
-    segments.push({
-      speaker: currentSpeaker,
-      text: current.map((word) => word.text).join(" ").trim(),
-      start: Number(current[0]?.start ?? 0),
-      end: Number(current[current.length - 1]?.end ?? 0),
-      words: current,
-    });
-    current = [];
-  };
-
-  for (const word of words) {
-    const speaker = normalizeSpeakerId(word?.speaker);
-    const speakerChanged = current.length > 0 && speaker !== currentSpeaker;
-    const duration = current.length > 0 ? Number(word.end ?? 0) - Number(current[0]?.start ?? 0) : 0;
-    const endsSentence = /[.!?…]$/.test(String(word.text || ""));
-
-    if (speakerChanged || current.length >= 40 || duration >= 12_000) {
-      pushCurrent();
-      currentSpeaker = speaker;
-    }
-
-    if (current.length === 0) currentSpeaker = speaker;
-    current.push(word);
-
-    if (endsSentence) {
-      pushCurrent();
-      currentSpeaker = null;
-    }
-  }
-
-  pushCurrent();
-  return segments.filter((segment) => segment.text);
-}
-
-function buildSegmentsFromAssemblyUtterances(utterances = []) {
-  if (!Array.isArray(utterances) || utterances.length === 0) return [];
-  return utterances
-    .map((utterance) => ({
-      speaker: normalizeSpeakerId(utterance.speaker),
-      text: String(utterance.text || "").trim(),
-      start: Number(utterance.start ?? 0),
-      end: Number(utterance.end ?? 0),
-      words: Array.isArray(utterance.words) ? utterance.words : [],
-    }))
-    .filter((segment) => segment.text);
-}
-
-function normalizeSonixSegments(jsonTranscript) {
-  const segments = Array.isArray(jsonTranscript?.transcript)
-    ? jsonTranscript.transcript
-    : [];
-
-  return segments
-    .map((segment) => {
-      const words = Array.isArray(segment.words)
-        ? segment.words.map((word) => ({
-            text: word.text || "",
-            start: Math.round(Number(word.start_time || 0) * 1000),
-            end: Math.round(Number(word.end_time || word.start_time || 0) * 1000),
-            speaker: normalizeSpeakerId(segment.speaker),
-          }))
-        : [];
-      return {
-        speaker: normalizeSpeakerId(segment.speaker),
-        text: words.map((word) => word.text).join(" ").trim(),
-        start: Number(words[0]?.start ?? 0),
-        end: Number(words[words.length - 1]?.end ?? 0),
-        words,
-      };
-    })
-    .filter((segment) => segment.text);
 }
 
 function buildTextFromDeepgram(response, speakerLabels) {
@@ -698,13 +685,30 @@ async function transcribeWithDeepgram({
       null,
     text: buildTextFromDeepgram(body, speakerLabels),
     words: normalizeDeepgramWords(body),
-    segments: buildSegmentsFromWords(normalizeDeepgramWords(body)),
   };
 }
 
 function getSonixLanguage() {
   const configured = normalizeLanguageCode(process.env.SONIX_LANGUAGE, "vi");
   return configured === "auto" || configured === "multi" ? "vi" : configured;
+}
+
+async function assertTranscriptionProviderReady() {
+  const providerConfig = await getTranscriptionProviderConfig();
+  const provider = providerConfig.provider;
+  assertSupportedProvider(provider);
+  requireProviderApiKey(provider, providerConfig.apiKey);
+  return provider;
+}
+
+function getSonixCallbackUrl() {
+  if (process.env.SONIX_CALLBACK_URL) return process.env.SONIX_CALLBACK_URL;
+  const baseUrl = String(process.env.PUBLIC_BACKEND_URL || "")
+    .trim()
+    .replace(/\/$/, "");
+  const secret = String(process.env.SONIX_CALLBACK_SECRET || "").trim();
+  if (!baseUrl || !secret) return "";
+  return `${baseUrl}/api/transcribe/sonix/callback?secret=${encodeURIComponent(secret)}`;
 }
 
 function resolveSonixLanguage(language) {
@@ -722,24 +726,31 @@ async function submitSonixMedia(
   filename,
   language,
   dictionaryKeywords = [],
+  customData = {},
 ) {
+  const form = new FormData();
   if (file.size > SONIX_DIRECT_UPLOAD_MAX_MB * 1024 * 1024) {
-    throw createHttpError(
-      400,
-      `Sonix API chỉ hỗ trợ upload trực tiếp tối đa ${SONIX_DIRECT_UPLOAD_MAX_MB}MB. Hãy dùng file nhỏ hơn hoặc triển khai file_url cho file lớn.`,
+    if (!file.fileUrl) {
+      throw createHttpError(
+        503,
+        `Sonix chỉ nhận multipart tối đa ${SONIX_DIRECT_UPLOAD_MAX_MB}MB. Backend chưa tạo được file_url công khai cho file này.`,
+      );
+    }
+    form.append("file_url", file.fileUrl);
+  } else {
+    form.append(
+      "file",
+      new Blob([file.buffer], {
+        type: file.mimetype || "application/octet-stream",
+      }),
+      filename,
     );
   }
-
-  const form = new FormData();
-  form.append(
-    "file",
-    new Blob([file.buffer], {
-      type: file.mimetype || "application/octet-stream",
-    }),
-    filename,
-  );
   form.append("language", resolveSonixLanguage(language));
   form.append("name", filename);
+  if (Object.keys(customData).length > 0) {
+    form.append("custom_data", JSON.stringify(customData));
+  }
 
   const keywords = [
     ...dictionaryKeywords.map((keyword) => String(keyword || "").trim()),
@@ -750,8 +761,8 @@ async function submitSonixMedia(
   if (keywords.length > 0) form.append("keywords", keywords.join(","));
   if (process.env.SONIX_FOLDER_ID)
     form.append("folder_id", process.env.SONIX_FOLDER_ID);
-  if (process.env.SONIX_CALLBACK_URL)
-    form.append("callback_url", process.env.SONIX_CALLBACK_URL);
+  const callbackUrl = getSonixCallbackUrl();
+  if (callbackUrl) form.append("callback_url", callbackUrl);
 
   return sonixRequest(providerConfig, "/media", {
     method: "POST",
@@ -834,6 +845,7 @@ async function transcribeWithSonix({
   language,
   dictionaryKeywords = [],
   providerConfig,
+  customData = {},
 }) {
   const uploadResult = await submitSonixMedia(
     providerConfig,
@@ -841,6 +853,7 @@ async function transcribeWithSonix({
     filename,
     language,
     dictionaryKeywords,
+    customData,
   );
   const mediaId = uploadResult.duplicate_media_id || uploadResult.id;
 
@@ -858,7 +871,6 @@ async function transcribeWithSonix({
   );
 
   const words = normalizeSonixWords(jsonTranscript);
-  const segments = normalizeSonixSegments(jsonTranscript);
   const text = buildTextFromSonixJson(jsonTranscript, speakerLabels);
 
   return {
@@ -867,17 +879,38 @@ async function transcribeWithSonix({
     duration: media.duration || null,
     text,
     words,
-    segments,
   };
 }
 
-async function transcribeWithAssemblyAI({ file, speakerLabels, providerConfig }) {
+async function transcribeWithAssemblyAI({
+  file,
+  speakerLabels,
+  providerConfig,
+  targetLanguage,
+}) {
   const client = getAssemblyClient(providerConfig);
-  const transcript = await client.transcripts.transcribe({
+  const normalizedTarget = normalizeTranslateTarget(targetLanguage);
+  const transcriptParams = {
     audio: file.buffer,
     language_detection: true,
     speaker_labels: Boolean(speakerLabels),
-  });
+  };
+  if (
+    normalizedTarget &&
+    process.env.ASSEMBLYAI_TRANSLATION_ENABLED !== "false"
+  ) {
+    transcriptParams.speech_understanding = {
+      request: {
+        translation: {
+          target_languages: [normalizedTarget],
+          formal: false,
+          match_original_utterance: Boolean(speakerLabels),
+        },
+      },
+    };
+  }
+
+  const transcript = await client.transcripts.transcribe(transcriptParams);
 
   if (transcript.status === "error") {
     throw createHttpError(
@@ -892,8 +925,32 @@ async function transcribeWithAssemblyAI({ file, speakerLabels, providerConfig })
           .map((u) => `Người nói ${u.speaker}: ${u.text}`)
           .join("\n\n")
       : transcript.text || "";
-
-  const utteranceSegments = buildSegmentsFromAssemblyUtterances(transcript.utterances);
+  const translatedUtterances = normalizedTarget
+    ? (transcript.utterances || [])
+        .map((utterance) => {
+          const translated =
+            utterance.translated_texts?.[normalizedTarget] ||
+            utterance.translatedTexts?.[normalizedTarget] ||
+            "";
+          if (!translated) return "";
+          return speakerLabels
+            ? `Người nói ${utterance.speaker}: ${translated}`
+            : translated;
+        })
+        .filter(Boolean)
+    : [];
+  const translatedText = normalizedTarget
+    ? transcript.translated_texts?.[normalizedTarget] ||
+      transcript.translatedTexts?.[normalizedTarget] ||
+      translatedUtterances.join("\n\n")
+    : "";
+  const translationStatus =
+    transcript.speech_understanding?.response?.translation?.status || null;
+  const translationError =
+    normalizedTarget && !translatedText && translationStatus !== "success"
+      ? transcript.speech_understanding?.response?.translation?.error ||
+        "AssemblyAI chưa tạo được bản dịch cho transcript này."
+      : null;
 
   return {
     provider: "assemblyai",
@@ -901,10 +958,16 @@ async function transcribeWithAssemblyAI({ file, speakerLabels, providerConfig })
     duration: transcript.audio_duration || null,
     text,
     words: transcript.words || [],
-    segments:
-      utteranceSegments.length > 0
-        ? utteranceSegments
-        : buildSegmentsFromWords(transcript.words || []),
+    detectedLanguage: transcript.language_code || null,
+    translation: translatedText
+      ? {
+          provider: "assemblyai-translation",
+          text: translatedText,
+          sourceLanguage: transcript.language_code || "auto",
+          targetLanguage: normalizedTarget,
+        }
+      : null,
+    translationError,
   };
 }
 
@@ -914,8 +977,10 @@ async function transcribeAudio({
   filename,
   language,
   audioMode = "speech",
+  translateTo = "",
   dictionaryKeywords = [],
   transcriptionSettings = {},
+  providerMetadata = {},
 }) {
   const providerConfig = await getTranscriptionProviderConfig();
   const provider = providerConfig.provider;
@@ -935,6 +1000,7 @@ async function transcribeAudio({
       language,
       dictionaryKeywords,
       providerConfig,
+      customData: providerMetadata,
     });
     return {
       ...result,
@@ -967,6 +1033,7 @@ async function transcribeAudio({
     file: providerFile,
     speakerLabels,
     providerConfig,
+    targetLanguage: translateTo,
   });
   return {
     ...result,
@@ -977,7 +1044,7 @@ async function transcribeAudio({
   };
 }
 
-async function transcribeAndSave({
+async function transcribeFile({
   userId,
   file,
   speakerLabels = false,
@@ -987,6 +1054,7 @@ async function transcribeAndSave({
   translateTo = "",
   dictionaryKeywords = [],
   transcriptionSettings = {},
+  providerMetadata = {},
   validateResult,
 }) {
   if (!file) throw createHttpError(400, "Vui lòng chọn file âm thanh");
@@ -994,105 +1062,145 @@ async function transcribeAndSave({
     throw createHttpError(400, "Định dạng file không được hỗ trợ");
   }
 
+  const filename = normalizeFilename(file.originalname);
+  const startedAt = Date.now();
+  const sourceLanguage = normalizeLanguageCode(language, "auto");
+  const targetLanguage = normalizeTranslateTarget(translateTo);
+  const result = await transcribeAudio({
+    file,
+    speakerLabels,
+    filename,
+    language: sourceLanguage,
+    audioMode,
+    translateTo: targetLanguage,
+    dictionaryKeywords,
+    transcriptionSettings,
+    providerMetadata: {
+      user_id: userId,
+      ...providerMetadata,
+    },
+  });
+  const processingSeconds = Number(
+    ((Date.now() - startedAt) / 1000).toFixed(2),
+  );
+
+  if (!String(result.text || "").trim()) {
+    const isSongMode = normalizeAudioMode(audioMode) === "song";
+    throw createHttpError(
+      422,
+      isSongMode
+        ? "Chế độ bài hát đã thử tách vocal nhưng vẫn chưa phát hiện đủ lời để xuất văn bản. Hãy thử bản có vocal rõ hơn hoặc karaoke/acapella."
+        : "Không phát hiện lời nói hoặc lời hát đủ rõ để xuất thành văn bản. Hãy thử file gốc có chất lượng tốt hơn hoặc kiểm tra ngôn ngữ đã chọn.",
+    );
+  }
+
+  if (validateResult) {
+    await validateResult({
+      duration: result.duration,
+      processingSeconds,
+      provider: result.provider,
+      source,
+    });
+  }
+
+  let translation = result.translation || null;
+  let translationError = result.translationError || null;
+  if (targetLanguage && !translation) {
+    try {
+      translation = await translateTranscript({
+        text: result.text,
+        sourceLanguage: result.detectedLanguage || sourceLanguage,
+        targetLanguage,
+      });
+    } catch (error) {
+      const fallbackError =
+        error.message || "Không dịch được transcript sang ngôn ngữ đã chọn.";
+      translationError = translationError
+        ? `${translationError} ${fallbackError}`
+        : fallbackError;
+    }
+  }
+
+  return {
+    provider: result.provider,
+    providerId: result.providerId,
+    audioMode: result.audioMode,
+    preprocessingApplied: result.preprocessingApplied,
+    preprocessingMethod: result.preprocessingMethod,
+    preprocessingWarning: result.preprocessingWarning,
+    filename,
+    fileSize: file.size,
+    duration: result.duration,
+    processingSeconds,
+    text: result.text,
+    words: result.words || [],
+    sourceLanguage: result.detectedLanguage || sourceLanguage,
+    translation,
+    translationError,
+  };
+}
+
+async function transcribeAndSave(args) {
+  const { userId, file } = args;
   let savedAudioFilename = null;
+  let client = null;
 
   try {
-    const filename = normalizeFilename(file.originalname);
-    const startedAt = Date.now();
-    const sourceLanguage = normalizeLanguageCode(language, "auto");
-    const targetLanguage = normalizeTranslateTarget(translateTo);
-    const result = await transcribeAudio({
-      file,
-      speakerLabels,
-      filename,
-      language: sourceLanguage,
-      audioMode,
-      dictionaryKeywords,
-      transcriptionSettings,
-    });
-    const processingSeconds = Number(
-      ((Date.now() - startedAt) / 1000).toFixed(2),
-    );
-
-    if (!String(result.text || "").trim()) {
-      const isSongMode = normalizeAudioMode(audioMode) === "song";
-      throw createHttpError(
-        422,
-        isSongMode
-          ? "Chế độ bài hát đã thử tách vocal nhưng vẫn chưa phát hiện đủ lời để xuất văn bản. Hãy thử bản có vocal rõ hơn hoặc karaoke/acapella."
-          : "Không phát hiện lời nói hoặc lời hát đủ rõ để xuất thành văn bản. Hãy thử file gốc có chất lượng tốt hơn hoặc kiểm tra ngôn ngữ đã chọn.",
-      );
-    }
-
-    if (validateResult) {
-      await validateResult({
-        duration: result.duration,
-        processingSeconds,
-        provider: result.provider,
-        source,
-      });
-    }
-
-    let translation = null;
-    let translationError = null;
-    if (targetLanguage) {
-      try {
-        translation = await translateTranscript({
-          text: result.text,
-          sourceLanguage: result.detectedLanguage || sourceLanguage,
-          targetLanguage,
-        });
-      } catch (error) {
-        translationError =
-          error.message || "Không dịch được transcript sang ngôn ngữ đã chọn.";
-      }
-    }
-
+    const result = await transcribeFile(args);
     const ext = getSafeExtension(file.originalname);
     savedAudioFilename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    fs.writeFileSync(path.join(UPLOADS_DIR, savedAudioFilename), file.buffer);
+    fs.writeFileSync(resolveStoredAudioPath(savedAudioFilename), file.buffer, {
+      flag: "wx",
+      mode: 0o600,
+    });
 
-    const { rows } = await pool.query(
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const { rows } = await client.query(
       `INSERT INTO transcriptions (
-         user_id, filename, file_size, duration, processing_seconds, text, words, segments, speaker_names, audio_filename,
-         source_language, translated_text, translation_target_language, translation_provider
+         user_id, filename, file_size, duration, processing_seconds, text, words, audio_filename,
+         source_language, translated_text, translation_target_language, translation_provider,
+         translation_error
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '{}'::jsonb, $9, $10, $11, $12, $13)
-       RETURNING id, filename, file_size, duration, processing_seconds, text, words, segments, speaker_names, audio_filename,
-         source_language, translated_text, translation_target_language, translation_provider, created_at`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       RETURNING id, filename, file_size, duration, processing_seconds, text, words, audio_filename,
+         source_language, translated_text, translation_target_language, translation_provider,
+         translation_error, created_at`,
       [
         userId,
-        filename,
-        file.size,
+        result.filename,
+        result.fileSize,
         result.duration,
-        processingSeconds,
+        result.processingSeconds,
         result.text,
-        JSON.stringify(result.words || []),
-        JSON.stringify(result.segments || buildSegmentsFromWords(result.words || [])),
+        JSON.stringify(result.words),
         savedAudioFilename,
-        result.detectedLanguage || sourceLanguage,
-        translation?.text || null,
-        translation?.targetLanguage || targetLanguage || null,
-        translation?.provider || null,
+        result.sourceLanguage,
+        result.translation?.text || null,
+        result.translation?.targetLanguage ||
+          normalizeTranslateTarget(args.translateTo) ||
+          null,
+        result.translation?.provider || null,
+        result.translationError || null,
       ],
     );
+    await recordQuotaUsage({
+      userId,
+      transcriptionId: rows[0].id,
+      durationSeconds: rows[0].duration,
+      db: client,
+    });
+    await client.query("COMMIT");
 
     return {
       id: rows[0].id,
-      provider: result.provider,
-      providerId: result.providerId,
-      audioMode: result.audioMode,
-      preprocessingApplied: result.preprocessingApplied,
-      preprocessingMethod: result.preprocessingMethod,
-      preprocessingWarning: result.preprocessingWarning,
+      ...result,
       filename: rows[0].filename,
       fileSize: rows[0].file_size,
       duration: rows[0].duration,
       processingSeconds: rows[0].processing_seconds,
       text: rows[0].text,
       words: rows[0].words || [],
-      segments: rows[0].segments || [],
-      speakerNames: rows[0].speaker_names || {},
       sourceLanguage: rows[0].source_language,
       translation: rows[0].translated_text
         ? {
@@ -1102,13 +1210,16 @@ async function transcribeAndSave({
             provider: rows[0].translation_provider,
           }
         : null,
-      translationError,
+      translationError: rows[0].translation_error || null,
       createdAt: rows[0].created_at,
     };
   } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     if (savedAudioFilename)
-      fs.unlink(path.join(UPLOADS_DIR, savedAudioFilename), () => {});
+      fs.unlink(resolveStoredAudioPath(savedAudioFilename), () => {});
     throw error;
+  } finally {
+    client?.release();
   }
 }
 
@@ -1118,5 +1229,9 @@ module.exports = {
   UPLOADS_DIR,
   createHttpError,
   getTranscriptionProvider,
+  assertTranscriptionProviderReady,
+  probeMediaFile,
+  resolveStoredAudioPath,
+  transcribeFile,
   transcribeAndSave,
 };

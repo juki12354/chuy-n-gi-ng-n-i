@@ -185,7 +185,13 @@ function SupportPage() {
               <CircleHelp className="h-6 w-6 text-[#ffcb05]" />
               <h2 className="mt-4 text-lg font-black">Đã có tài khoản?</h2>
               <p className="mt-2 text-sm leading-6 text-white/68">Bạn có thể xem những yêu cầu đã gửi ở bảng hỗ trợ khi đăng nhập.</p>
-              <Link to="/login" className="mt-5 inline-flex items-center gap-2 text-sm font-black text-[#ffcb05]">Đăng nhập <ChevronRight className="h-4 w-4" /></Link>
+              <Link
+                to="/login"
+                search={{ error: undefined, from: undefined }}
+                className="mt-5 inline-flex items-center gap-2 text-sm font-black text-[#ffcb05]"
+              >
+                Đăng nhập <ChevronRight className="h-4 w-4" />
+              </Link>
             </div>
           </aside>
         </div>

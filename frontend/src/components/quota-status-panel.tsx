@@ -1,13 +1,34 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Clock3, Crown, Save } from "lucide-react";
+import { ArrowRight, CalendarX2, Clock3, Crown, RotateCcw, Save } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { createCheckout } from "@/lib/billing";
+import {
+  cancelPlanAtPeriodEnd,
+  resumeCancelledPlan,
+} from "@/lib/billing";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   fetchQuota,
   formatQuotaTime,
   saveQuotaAlert,
   type QuotaStatus,
 } from "@/lib/quota";
+
+function formatPlanDate(value?: string | null) {
+  if (!value) return "cuối chu kỳ hiện tại";
+  return new Intl.DateTimeFormat("vi-VN", { dateStyle: "long" }).format(
+    new Date(value),
+  );
+}
 
 export function QuotaStatusPanel({
   compact = false,
@@ -22,18 +43,19 @@ export function QuotaStatusPanel({
   refreshKey?: number;
   onQuotaChange?: (quota: QuotaStatus) => void;
 }) {
-  const { token } = useAuth();
+  const { token, updateUser } = useAuth();
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
   const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
   const [alertMinutes, setAlertMinutes] = useState(1);
   const [savingAlert, setSavingAlert] = useState(false);
+  const [changingPlan, setChangingPlan] = useState(false);
 
   async function loadQuota() {
     if (!token) return;
     try {
       const data = await fetchQuota(token);
       setQuota(data);
+      updateUser({ plan: data.plan });
       setAlertMinutes(Math.max(1, Math.round(data.alertSeconds / 60)));
       onQuotaChange?.(data);
     } catch (error) {
@@ -48,27 +70,19 @@ export function QuotaStatusPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, refreshKey]);
 
-  async function handleUpgrade() {
-    if (!token) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      const checkout = await createCheckout(token, "special", "monthly");
-      window.location.assign(`/checkout/${checkout.order.id}`);
-    } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Không tạo được đơn hàng",
-      );
-    } finally {
-      setBusy(false);
-    }
+  function handleUpgrade() {
+    window.location.assign("/pricing");
   }
 
   async function handleSaveAlert() {
-    if (!token) return;
+    if (!token || !quota) return;
     const minutes = Math.round(Number(alertMinutes));
-    if (!Number.isFinite(minutes) || minutes < 1 || minutes > 10_080) {
-      setMessage("Mức cảnh báo cần từ 1 đến 10.080 phút.");
+    const maxMinutes = Math.max(
+      1,
+      Math.floor((quota.maxAlertSeconds || quota.quotaSeconds) / 60),
+    );
+    if (!Number.isFinite(minutes) || minutes < 1 || minutes > maxMinutes) {
+      setMessage(`Mức cảnh báo cần từ 1 đến ${maxMinutes} phút.`);
       return;
     }
 
@@ -86,6 +100,40 @@ export function QuotaStatusPanel({
       );
     } finally {
       setSavingAlert(false);
+    }
+  }
+
+  async function handleCancelPlan() {
+    if (!token) return;
+    setChangingPlan(true);
+    setMessage("");
+    try {
+      const updatedQuota = await cancelPlanAtPeriodEnd(token);
+      setQuota(updatedQuota);
+      onQuotaChange?.(updatedQuota);
+      setMessage("Đã ghi nhận yêu cầu hủy gói vào cuối chu kỳ.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Không hủy được gói cước");
+    } finally {
+      setChangingPlan(false);
+    }
+  }
+
+  async function handleResumePlan() {
+    if (!token) return;
+    setChangingPlan(true);
+    setMessage("");
+    try {
+      const updatedQuota = await resumeCancelledPlan(token);
+      setQuota(updatedQuota);
+      onQuotaChange?.(updatedQuota);
+      setMessage("Đã hoàn tác yêu cầu hủy gói.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Không hoàn tác được yêu cầu hủy",
+      );
+    } finally {
+      setChangingPlan(false);
     }
   }
 
@@ -128,7 +176,10 @@ export function QuotaStatusPanel({
               <input
                 type="number"
                 min="1"
-                max="10080"
+                max={Math.max(
+                  1,
+                  Math.floor((quota.maxAlertSeconds || quota.quotaSeconds) / 60),
+                )}
                 value={alertMinutes}
                 onChange={(event) => setAlertMinutes(Number(event.target.value))}
                 className="h-12 w-full rounded-lg border border-[#e8decc] bg-white px-4 text-lg font-black text-[#21104a] outline-none transition focus:border-[#ffcb05]"
@@ -160,6 +211,71 @@ export function QuotaStatusPanel({
             File: {formatQuotaTime(quota.limits.maxFileSeconds)}
           </span>
         </div>
+
+        {quota.topUpRemainingSeconds > 0 && (
+          <p className="mt-2 text-xs font-bold text-[#6a5a8f]">
+            Gồm {formatQuotaTime(quota.topUpRemainingSeconds)} mua thêm
+            {quota.topUpNextExpiry
+              ? `, dùng trước ${formatPlanDate(quota.topUpNextExpiry)}`
+              : ""}
+          </p>
+        )}
+
+        {isPaid && !compact && (
+          quota.cancelAtPeriodEnd ? (
+            <div className="mt-4 rounded-lg border border-[#f0d783] bg-[#fffaf0] p-3">
+              <p className="text-sm font-black text-[#21104a]">
+                Gói sẽ kết thúc vào {formatPlanDate(quota.planExpiresAt)}
+              </p>
+              <p className="mt-1 text-xs font-semibold leading-5 text-[#756894]">
+                Bạn vẫn sử dụng toàn bộ quyền lợi và quota đến hết ngày này.
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleResumePlan()}
+                disabled={changingPlan}
+                className="mt-3 inline-flex items-center gap-2 rounded-full border border-[#e8decc] bg-white px-3 py-2 text-xs font-black text-[#21104a] transition hover:border-[#ffcb05] disabled:opacity-60"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                {changingPlan ? "Đang xử lý..." : "Hoàn tác hủy gói"}
+              </button>
+            </div>
+          ) : (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button
+                  type="button"
+                  disabled={changingPlan}
+                  className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-[#756894] underline decoration-[#d8cde9] underline-offset-4 transition hover:text-[#21104a] disabled:opacity-60"
+                >
+                  <CalendarX2 className="h-3.5 w-3.5" />
+                  Hủy gói cước
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="max-w-md rounded-xl border-[#e8decc] bg-white text-[#21104a]">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="font-black text-[#21104a]">
+                    Xác nhận hủy gói {quota.label}?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="leading-6 text-[#756894]">
+                    Gói vẫn hoạt động đến {formatPlanDate(quota.planExpiresAt)} rồi
+                    chuyển về Free. Thao tác này không tự động hoàn tiền và bạn có
+                    thể hoàn tác trước ngày hết hạn.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Giữ gói hiện tại</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => void handleCancelPlan()}
+                    className="bg-[#21104a] font-black text-white hover:bg-[#32196f]"
+                  >
+                    Hủy vào cuối chu kỳ
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )
+        )}
 
         {message && (
           <p className="mt-3 text-xs font-bold text-[#756894]">{message}</p>
@@ -195,6 +311,11 @@ export function QuotaStatusPanel({
           style={{ width: `${quota.percentUsed}%` }}
         />
       </div>
+      {quota.topUpRemainingSeconds > 0 && (
+        <p className="mt-2 text-[11px] font-bold text-[#6a5a8f]">
+          Có {formatQuotaTime(quota.topUpRemainingSeconds)} thời lượng mua thêm
+        </p>
+      )}
     </div>
   );
 
@@ -212,9 +333,8 @@ export function QuotaStatusPanel({
 
       {!isPaid && (
         <button
-          onClick={() => void handleUpgrade()}
-          disabled={busy}
-          className="mt-3 rounded-full bg-[#ffcb05] px-3 py-1.5 text-xs font-bold text-[#21104a] transition hover:bg-[#ffdc45] disabled:opacity-60"
+          onClick={handleUpgrade}
+          className="mt-3 rounded-full bg-[#ffcb05] px-3 py-1.5 text-xs font-bold text-[#21104a] transition hover:bg-[#ffdc45]"
         >
           Nâng cấp gói
         </button>

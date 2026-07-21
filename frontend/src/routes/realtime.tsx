@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { AuthenticatedHeader } from "@/components/auth-app-header";
-import { QuotaStatusPanel } from "@/components/quota-status-panel";
+import { VbeeAccountUsageCard } from "@/components/vbee-preferences-layout";
 import { formatQuotaTime, type QuotaStatus } from "@/lib/quota";
 import {
   SPEECH_LANGUAGE_OPTIONS,
@@ -94,6 +94,7 @@ function RealtimePage() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [savedId, setSavedId] = useState<number | null>(null);
   const [translation, setTranslation] = useState<TranslationResult | null>(
     null,
@@ -105,6 +106,9 @@ function RealtimePage() {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const shouldRestartRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const realtimeSessionRef = useRef<string | null>(null);
+  const tokenRef = useRef<string | null>(token);
+  tokenRef.current = token;
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -120,15 +124,26 @@ function RealtimePage() {
       shouldRestartRef.current = false;
       recognitionRef.current?.abort();
       if (timerRef.current) clearInterval(timerRef.current);
+      const sessionId = realtimeSessionRef.current;
+      const activeToken = tokenRef.current;
+      if (sessionId && activeToken) {
+        void fetch(`${API_URL}/api/transcribe/realtime/sessions/${sessionId}`, {
+          method: "DELETE",
+          keepalive: true,
+          headers: { Authorization: `Bearer ${activeToken}` },
+        }).catch(() => {});
+      }
     };
   }, []);
 
-  function startTimer() {
+  function startTimer(serverMaxSeconds?: number) {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setElapsed((value) => {
         const next = value + 1;
-        const maxSeconds = quota?.remainingSeconds ?? null;
+        const maxSeconds = serverMaxSeconds ?? (quota
+          ? Math.min(quota.remainingSeconds, quota.limits.maxRecordSeconds)
+          : null);
         if (maxSeconds && next >= maxSeconds) {
           window.setTimeout(() => stopListening(), 0);
         }
@@ -148,7 +163,17 @@ function RealtimePage() {
     return window.SpeechRecognition || window.webkitSpeechRecognition || null;
   }
 
-  function startListening() {
+  async function cancelRealtimeSession() {
+    const sessionId = realtimeSessionRef.current;
+    realtimeSessionRef.current = null;
+    if (!sessionId || !token) return;
+    await fetch(`${API_URL}/api/transcribe/realtime/sessions/${sessionId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {});
+  }
+
+  async function startListening() {
     setError("");
     setSavedId(null);
     setTranslation(null);
@@ -158,12 +183,50 @@ function RealtimePage() {
       setError("Bạn đã hết quota. Hãy nâng cấp gói để dùng realtime tiếp.");
       return;
     }
+    if (!token) {
+      setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+      return;
+    }
 
     const SpeechRecognitionApi = getSpeechRecognition();
     if (!SpeechRecognitionApi) {
       setError(
         "Trình duyệt này chưa hỗ trợ nói realtime. Hãy dùng Chrome hoặc Edge mới nhất.",
       );
+      return;
+    }
+
+    setStarting(true);
+    await cancelRealtimeSession();
+    let serverMaxSeconds: number;
+    try {
+      const sessionResponse = await fetch(
+        `${API_URL}/api/transcribe/realtime/sessions`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      const sessionData = (await sessionResponse.json()) as {
+        sessionId?: string;
+        maxSeconds?: number;
+        quota?: QuotaStatus;
+        error?: string;
+      };
+      if (!sessionResponse.ok || !sessionData.sessionId || !sessionData.maxSeconds) {
+        if (sessionData.quota) setQuota(sessionData.quota);
+        throw new Error(sessionData.error || "Không bắt đầu được phiên realtime.");
+      }
+      realtimeSessionRef.current = sessionData.sessionId;
+      serverMaxSeconds = sessionData.maxSeconds;
+      if (sessionData.quota) setQuota(sessionData.quota);
+    } catch (sessionError) {
+      setError(
+        sessionError instanceof Error
+          ? sessionError.message
+          : "Không bắt đầu được phiên realtime.",
+      );
+      setStarting(false);
       return;
     }
 
@@ -211,9 +274,12 @@ function RealtimePage() {
     try {
       recognition.start();
       setListening(true);
-      startTimer();
+      startTimer(serverMaxSeconds);
     } catch {
+      await cancelRealtimeSession();
       setError("Không thể bắt đầu realtime. Hãy thử lại sau vài giây.");
+    } finally {
+      setStarting(false);
     }
   }
 
@@ -227,6 +293,7 @@ function RealtimePage() {
 
   function reset() {
     stopListening();
+    void cancelRealtimeSession();
     setTranscript("");
     setInterim("");
     setElapsed(0);
@@ -272,6 +339,10 @@ function RealtimePage() {
       setError("Chưa có transcript để lưu.");
       return;
     }
+    if (!realtimeSessionRef.current) {
+      setError("Phiên realtime không còn hợp lệ. Hãy bấm Bắt đầu và thử lại.");
+      return;
+    }
     setSaving(true);
     setError("");
     setTranslation(null);
@@ -285,7 +356,7 @@ function RealtimePage() {
         },
         body: JSON.stringify({
           text,
-          durationSeconds: Math.max(1, elapsed),
+          realtimeSessionId: realtimeSessionRef.current,
           source: "realtime",
           language,
           translateTo,
@@ -304,6 +375,7 @@ function RealtimePage() {
         return;
       }
       setSavedId(data.id ?? null);
+      realtimeSessionRef.current = null;
       setTranslation(data.translation ?? null);
       setTranslationError(data.translationError ?? "");
       if (data.quota) setQuota(data.quota);
@@ -354,7 +426,7 @@ function RealtimePage() {
           </Link>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
           <section className="rounded-lg border border-border bg-white p-4 shadow-soft">
             <div className="flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -391,11 +463,12 @@ function RealtimePage() {
                   </button>
                 ) : (
                   <button
-                    onClick={startListening}
+                    onClick={() => void startListening()}
+                    disabled={starting}
                     className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-black text-primary-foreground shadow-glow transition hover:opacity-90"
                   >
                     <Mic className="h-4 w-4" />
-                    Bắt đầu nói
+                    {starting ? "Đang bắt đầu..." : "Bắt đầu nói"}
                   </button>
                 )}
                 <button
@@ -499,7 +572,9 @@ function RealtimePage() {
           </section>
 
           <aside className="space-y-4">
-            <QuotaStatusPanel
+            <VbeeAccountUsageCard
+              firstName={user.firstName}
+              showAlert={false}
               refreshKey={quotaRefreshKey}
               onQuotaChange={setQuota}
             />

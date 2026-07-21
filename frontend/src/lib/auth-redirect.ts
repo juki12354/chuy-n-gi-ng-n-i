@@ -1,11 +1,11 @@
-export const DEFAULT_AUTH_REDIRECT = "/upload";
+export const DEFAULT_AUTH_REDIRECT = "/dashboard";
 
 const AUTH_REDIRECT_ALLOWLIST = new Set([
+  "/dashboard",
   "/upload",
   "/record",
   "/realtime",
   "/history",
-  "/profile",
   "/api",
   "/pricing",
   "/custom-dictionary",

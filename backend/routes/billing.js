@@ -1,36 +1,56 @@
 require("../config/env");
 const express = require("express");
-const jwt = require("jsonwebtoken");
+const { requireAuth } = require("../middleware/auth");
 const {
+  billingLimiter,
+  webhookLimiter,
+} = require("../middleware/security");
+const { writeSecurityAudit } = require("../services/securityAuditService");
+const {
+  cancelActivePlan,
   confirmDemoPayment,
   createCheckoutOrder,
   getOrderForUser,
+  handlePayosWebhook,
   listPlans,
+  listTopUps,
   listUserOrders,
+  resumeActivePlan,
 } = require("../services/billingService");
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
-
-function authMiddleware(req, res, next) {
-  const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Chưa đăng nhập" });
-  }
-
-  try {
-    req.user = jwt.verify(auth.split(" ")[1], JWT_SECRET);
-    next();
-  } catch {
-    return res.status(401).json({ error: "Token không hợp lệ" });
-  }
-}
 
 router.get("/plans", (_req, res) => {
-  res.json({ plans: listPlans() });
+  res.json({ plans: listPlans(), topUps: listTopUps() });
 });
 
-router.get("/orders", authMiddleware, async (req, res) => {
+// PayOS calls this endpoint directly. Do not require a user token here: the
+// HMAC signature is verified before any payment or quota state is changed.
+router.post("/payos/webhook", webhookLimiter, async (req, res) => {
+  try {
+    const result = await handlePayosWebhook(req.body);
+    await writeSecurityAudit({
+      event: "billing.payos_webhook",
+      outcome: "success",
+      req,
+      metadata: { orderId: result.order?.id },
+    });
+    res.status(200).json({ code: "00", desc: "success" });
+  } catch (error) {
+    console.error("PayOS webhook rejected:", error.message);
+    await writeSecurityAudit({
+      event: "billing.payos_webhook",
+      outcome: "rejected",
+      req,
+      metadata: { reason: error.message },
+    });
+    res
+      .status(error.statusCode || 500)
+      .json({ code: "01", desc: error.message || "Webhook không hợp lệ" });
+  }
+});
+
+router.get("/orders", requireAuth, billingLimiter, async (req, res) => {
   try {
     res.json({ orders: await listUserOrders(req.user.id) });
   } catch (error) {
@@ -40,7 +60,7 @@ router.get("/orders", authMiddleware, async (req, res) => {
   }
 });
 
-router.get("/orders/:orderId", authMiddleware, async (req, res) => {
+router.get("/orders/:orderId", requireAuth, billingLimiter, async (req, res) => {
   try {
     res.json({ order: await getOrderForUser(req.user.id, req.params.orderId) });
   } catch (error) {
@@ -50,13 +70,21 @@ router.get("/orders/:orderId", authMiddleware, async (req, res) => {
   }
 });
 
-router.post("/checkout", authMiddleware, async (req, res) => {
+router.post("/checkout", requireAuth, billingLimiter, async (req, res) => {
   try {
     const checkout = await createCheckoutOrder({
       userId: req.user.id,
       plan: req.body.plan,
       billingCycle: req.body.billingCycle,
-      provider: req.body.provider || "demo",
+      productType: req.body.productType,
+      productCode: req.body.productCode,
+    });
+    await writeSecurityAudit({
+      event: "billing.checkout_created",
+      outcome: "success",
+      req,
+      userId: req.user.id,
+      metadata: { orderId: checkout.order?.id, plan: checkout.order?.plan },
     });
     res.status(201).json(checkout);
   } catch (error) {
@@ -66,7 +94,41 @@ router.post("/checkout", authMiddleware, async (req, res) => {
   }
 });
 
-router.post("/demo/confirm", authMiddleware, async (req, res) => {
+router.post("/subscription/cancel", requireAuth, billingLimiter, async (req, res) => {
+  try {
+    const quota = await cancelActivePlan(req.user.id);
+    await writeSecurityAudit({
+      event: "billing.subscription_cancel_requested",
+      outcome: "success",
+      req,
+      userId: req.user.id,
+    });
+    res.json({ quota });
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ error: error.message || "Không hủy được gói cước" });
+  }
+});
+
+router.post("/subscription/resume", requireAuth, billingLimiter, async (req, res) => {
+  try {
+    const quota = await resumeActivePlan(req.user.id);
+    await writeSecurityAudit({
+      event: "billing.subscription_resumed",
+      outcome: "success",
+      req,
+      userId: req.user.id,
+    });
+    res.json({ quota });
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json({ error: error.message || "Không hoàn tác được yêu cầu hủy" });
+  }
+});
+
+router.post("/demo/confirm", requireAuth, billingLimiter, async (req, res) => {
   try {
     const result = await confirmDemoPayment({
       userId: req.user.id,

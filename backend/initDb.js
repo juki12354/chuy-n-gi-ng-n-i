@@ -1,14 +1,22 @@
-const bcrypt = require("bcryptjs");
-const pool = require("./db");
-const { encryptProviderSecret } = require("./services/providerSecrets");
+const bcrypt = require('bcryptjs');
+const pool = require('./db');
+const { IS_PRODUCTION } = require('./config/security');
+const { normalizeFilename } = require('./services/filenameEncoding');
+const { encryptProviderSecret } = require('./services/providerSecrets');
 
-const FREE_PLAN_SECONDS = Number.parseInt(
-  process.env.FREE_PLAN_SECONDS || `${30 * 60}`,
-  10,
+function positiveInt(value, fallback) {
+  const parsed = Number.parseInt(String(value || ''), 10);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const FREE_PLAN_SECONDS = positiveInt(process.env.FREE_PLAN_SECONDS, 30 * 60);
+const DEFAULT_QUOTA_ALERT_SECONDS = positiveInt(
+  process.env.DEFAULT_QUOTA_ALERT_SECONDS,
+  5 * 60,
 );
-const DEFAULT_QUOTA_ALERT_SECONDS = Number.parseInt(
-  process.env.DEFAULT_QUOTA_ALERT_SECONDS || `${5 * 60}`,
-  10,
+const SECURITY_AUDIT_RETENTION_DAYS = Math.max(
+  30,
+  positiveInt(process.env.SECURITY_AUDIT_RETENTION_DAYS, 180),
 );
 
 async function initDatabase() {
@@ -21,17 +29,15 @@ async function initDatabase() {
       email VARCHAR(255) UNIQUE NOT NULL,
       password VARCHAR(255),
       avatar TEXT,
+      referral_code VARCHAR(32) UNIQUE,
       plan VARCHAR(20) NOT NULL DEFAULT 'free',
       quota_seconds INTEGER NOT NULL DEFAULT ${FREE_PLAN_SECONDS},
       quota_alert_seconds INTEGER NOT NULL DEFAULT ${DEFAULT_QUOTA_ALERT_SECONDS},
-      usage_alert_daily_seconds INTEGER NOT NULL DEFAULT 0,
-      usage_alert_date DATE NOT NULL DEFAULT CURRENT_DATE,
-      usage_alert_required BOOLEAN NOT NULL DEFAULT FALSE,
-      usage_alert_token VARCHAR(255),
-      usage_alert_sent_at TIMESTAMP WITH TIME ZONE,
-      usage_alert_confirmed_at TIMESTAMP WITH TIME ZONE,
       plan_started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       plan_expires_at TIMESTAMP WITH TIME ZONE,
+      free_trial_started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      plan_cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE,
+      plan_cancellation_requested_at TIMESTAMP WITH TIME ZONE,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
   `);
@@ -105,6 +111,25 @@ async function initDatabase() {
         admin_role = COALESCE(admin_role, 'none'),
         status = COALESCE(status, 'active')
   `);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(32);`);
+  await pool.query(`
+    UPDATE users
+    SET referral_code = 'VBEE-' || LPAD(id::text, GREATEST(6, LENGTH(id::text)), '0')
+    WHERE referral_code IS NULL OR BTRIM(referral_code) = '';
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code);`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan VARCHAR(20) NOT NULL DEFAULT 'free';`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS quota_seconds INTEGER NOT NULL DEFAULT ${FREE_PLAN_SECONDS};`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS quota_alert_seconds INTEGER NOT NULL DEFAULT ${DEFAULT_QUOTA_ALERT_SECONDS};`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_expires_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS free_trial_started_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`UPDATE users SET free_trial_started_at = COALESCE(free_trial_started_at, created_at, plan_started_at, NOW()) WHERE free_trial_started_at IS NULL;`);
+  await pool.query(`ALTER TABLE users ALTER COLUMN free_trial_started_at SET DEFAULT NOW();`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_cancellation_requested_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version INTEGER NOT NULL DEFAULT 0;`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS transcriptions (
@@ -116,13 +141,14 @@ async function initDatabase() {
       processing_seconds NUMERIC,
       text TEXT NOT NULL,
       words JSONB DEFAULT '[]'::jsonb,
-      segments JSONB DEFAULT '[]'::jsonb,
-      speaker_names JSONB DEFAULT '{}'::jsonb,
       audio_filename VARCHAR(255),
       source_language VARCHAR(20),
       translated_text TEXT,
       translation_target_language VARCHAR(20),
       translation_provider VARCHAR(40),
+      translation_error TEXT,
+      status VARCHAR(20) NOT NULL DEFAULT 'completed',
+      error_message TEXT,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
   `);
@@ -184,6 +210,223 @@ async function initDatabase() {
   await pool.query(
     `CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);`,
   );
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS file_size BIGINT;`);
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS duration NUMERIC;`);
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS processing_seconds NUMERIC;`);
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS words JSONB DEFAULT '[]'::jsonb;`);
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS audio_filename VARCHAR(255);`);
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS source_language VARCHAR(20);`);
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS translated_text TEXT;`);
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS translation_target_language VARCHAR(20);`);
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS translation_provider VARCHAR(40);`);
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS translation_error TEXT;`);
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'completed';`);
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS error_message TEXT;`);
+  await pool.query(`ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();`);
+
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcriptions_user_created ON transcriptions(user_id, created_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcriptions_user_status ON transcriptions(user_id, status);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
+      id UUID PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash VARCHAR(64) NOT NULL UNIQUE,
+      expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+      revoked_at TIMESTAMP WITH TIME ZONE,
+      replaced_by UUID,
+      ip_hash VARCHAR(64),
+      user_agent VARCHAR(500),
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_auth_refresh_user_active ON auth_refresh_tokens(user_id, expires_at) WHERE revoked_at IS NULL;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_auth_refresh_cleanup ON auth_refresh_tokens(expires_at, revoked_at);`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS security_audit_events (
+      id BIGSERIAL PRIMARY KEY,
+      event_type VARCHAR(100) NOT NULL,
+      outcome VARCHAR(20) NOT NULL,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      session_id VARCHAR(100),
+      request_id VARCHAR(100),
+      ip_hash VARCHAR(64),
+      user_agent VARCHAR(500),
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_security_audit_created ON security_audit_events(created_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_security_audit_user_created ON security_audit_events(user_id, created_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_security_audit_event_created ON security_audit_events(event_type, created_at DESC);`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS rate_limit_counters (
+      namespace VARCHAR(80) NOT NULL,
+      key_hash CHAR(64) NOT NULL,
+      window_started_at TIMESTAMP WITH TIME ZONE NOT NULL,
+      reset_at TIMESTAMP WITH TIME ZONE NOT NULL,
+      total_hits INTEGER NOT NULL DEFAULT 0 CHECK (total_hits >= 0),
+      PRIMARY KEY (namespace, key_hash, window_started_at)
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_rate_limit_cleanup ON rate_limit_counters(reset_at);`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id BIGSERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash CHAR(64) NOT NULL UNIQUE,
+      expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+      used_at TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_created ON password_reset_tokens(user_id, created_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expiry ON password_reset_tokens(expires_at) WHERE used_at IS NULL;`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS transcription_jobs (
+      id BIGSERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      transcription_id INTEGER NOT NULL UNIQUE REFERENCES transcriptions(id) ON DELETE CASCADE,
+      status VARCHAR(20) NOT NULL DEFAULT 'queued',
+      progress SMALLINT NOT NULL DEFAULT 0,
+      source VARCHAR(20) NOT NULL DEFAULT 'upload',
+      language VARCHAR(20) NOT NULL DEFAULT 'auto',
+      audio_mode VARCHAR(20) NOT NULL DEFAULT 'speech',
+      translate_to VARCHAR(20),
+      speaker_labels BOOLEAN NOT NULL DEFAULT FALSE,
+      expected_duration_seconds NUMERIC,
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 2,
+      cancel_requested BOOLEAN NOT NULL DEFAULT FALSE,
+      error_message TEXT,
+      available_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      locked_at TIMESTAMP WITH TIME ZONE,
+      started_at TIMESTAMP WITH TIME ZONE,
+      completed_at TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS progress SMALLINT NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS source VARCHAR(20) NOT NULL DEFAULT 'upload';`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS language VARCHAR(20) NOT NULL DEFAULT 'auto';`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS audio_mode VARCHAR(20) NOT NULL DEFAULT 'speech';`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS translate_to VARCHAR(20);`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS speaker_labels BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS expected_duration_seconds NUMERIC;`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb;`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS max_attempts INTEGER NOT NULL DEFAULT 2;`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS cancel_requested BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS error_message TEXT;`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS available_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS locked_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();`);
+  await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcription_jobs_ready ON transcription_jobs(status, available_at, created_at);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcription_jobs_user_status ON transcription_jobs(user_id, status);`);
+  await pool.query(`
+    UPDATE transcriptions transcript
+    SET translation_target_language = COALESCE(
+          transcript.translation_target_language,
+          NULLIF(job.translate_to, 'none')
+        ),
+        translation_error = COALESCE(
+          transcript.translation_error,
+          'Bản dịch không được lưu trong lần xử lý trước. Vui lòng chạy chuyển đổi lại.'
+        )
+    FROM transcription_jobs job
+    WHERE job.transcription_id = transcript.id
+      AND job.status = 'completed'
+      AND job.translate_to IS NOT NULL
+      AND job.translate_to NOT IN ('', 'none')
+      AND COALESCE(transcript.translated_text, '') = '';
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS realtime_sessions (
+      id UUID PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status VARCHAR(20) NOT NULL DEFAULT 'active',
+      max_seconds INTEGER NOT NULL CHECK (max_seconds > 0),
+      transcription_id INTEGER REFERENCES transcriptions(id) ON DELETE SET NULL,
+      started_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+      ended_at TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_realtime_one_active_user ON realtime_sessions(user_id) WHERE status = 'active';`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_realtime_expiry ON realtime_sessions(status, expires_at);`);
+  await pool.query(`UPDATE realtime_sessions SET status = 'expired', ended_at = COALESCE(ended_at, expires_at) WHERE status = 'active' AND expires_at <= NOW();`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quota_usage_ledger (
+      id BIGSERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      transcription_id INTEGER UNIQUE REFERENCES transcriptions(id) ON DELETE SET NULL,
+      seconds INTEGER NOT NULL CHECK (seconds > 0),
+      period_started_at TIMESTAMP WITH TIME ZONE NOT NULL,
+      period_ends_at TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`ALTER TABLE quota_usage_ledger ALTER COLUMN transcription_id DROP NOT NULL;`);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'quota_usage_ledger_transcription_id_fkey'
+          AND confdeltype <> 'n'
+      ) THEN
+        ALTER TABLE quota_usage_ledger
+          DROP CONSTRAINT quota_usage_ledger_transcription_id_fkey;
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'quota_usage_ledger_transcription_id_fkey'
+      ) THEN
+        ALTER TABLE quota_usage_ledger
+          ADD CONSTRAINT quota_usage_ledger_transcription_id_fkey
+          FOREIGN KEY (transcription_id) REFERENCES transcriptions(id) ON DELETE SET NULL;
+      END IF;
+    END
+    $$;
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_quota_usage_user_period ON quota_usage_ledger(user_id, period_started_at);`);
+  await pool.query(`
+    INSERT INTO quota_usage_ledger (
+      user_id, transcription_id, seconds, period_started_at, period_ends_at, created_at
+    )
+    SELECT transcript.user_id, transcript.id, CEIL(transcript.duration)::integer,
+           account.plan_started_at, account.plan_expires_at, transcript.created_at
+    FROM transcriptions transcript
+    JOIN users account ON account.id = transcript.user_id
+    WHERE transcript.status = 'completed'
+      AND transcript.duration > 0
+      AND (
+        transcript.created_at >= account.plan_started_at
+        OR (
+          account.plan_started_at <= account.created_at + INTERVAL '1 second'
+          AND transcript.created_at >= account.created_at
+        )
+      )
+      AND (account.plan_expires_at IS NULL OR transcript.created_at < account.plan_expires_at)
+    ON CONFLICT (transcription_id) DO NOTHING;
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS user_settings (
@@ -233,6 +476,8 @@ async function initDatabase() {
       id VARCHAR(36) PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       plan VARCHAR(20) NOT NULL,
+      product_type VARCHAR(20) NOT NULL DEFAULT 'subscription',
+      product_code VARCHAR(40),
       billing_cycle VARCHAR(20) NOT NULL DEFAULT 'monthly',
       amount INTEGER NOT NULL,
       currency VARCHAR(10) NOT NULL DEFAULT 'VND',
@@ -240,6 +485,10 @@ async function initDatabase() {
       provider VARCHAR(40) NOT NULL DEFAULT 'demo',
       provider_order_id VARCHAR(120),
       payment_url TEXT,
+      payment_code VARCHAR(50),
+      payment_qr_code TEXT,
+      payment_link_id VARCHAR(120),
+      payment_checked_at TIMESTAMP WITH TIME ZONE,
       raw_request JSONB NOT NULL DEFAULT '{}'::jsonb,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -293,6 +542,82 @@ async function initDatabase() {
   await pool.query(
     `CREATE INDEX IF NOT EXISTS idx_billing_orders_status ON billing_orders(status);`,
   );
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS plan VARCHAR(20) NOT NULL DEFAULT 'standard';`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS product_type VARCHAR(20) NOT NULL DEFAULT 'subscription';`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS product_code VARCHAR(40);`);
+  await pool.query(`UPDATE billing_orders SET product_code = plan WHERE product_code IS NULL AND product_type = 'subscription';`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS billing_cycle VARCHAR(20) NOT NULL DEFAULT 'monthly';`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS amount INTEGER NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS currency VARCHAR(10) NOT NULL DEFAULT 'VND';`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'pending';`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS provider VARCHAR(40) NOT NULL DEFAULT 'demo';`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS provider_order_id VARCHAR(120);`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS payment_url TEXT;`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS payment_code VARCHAR(50);`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS payment_qr_code TEXT;`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS payment_link_id VARCHAR(120);`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS payment_checked_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS raw_request JSONB NOT NULL DEFAULT '{}'::jsonb;`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`ALTER TABLE billing_orders ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_billing_orders_user_created ON billing_orders(user_id, created_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_billing_orders_status ON billing_orders(status);`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_orders_provider_order_id ON billing_orders(provider, provider_order_id) WHERE provider_order_id IS NOT NULL;`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS referrals (
+      id BIGSERIAL PRIMARY KEY,
+      referrer_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      referred_user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      referral_code VARCHAR(32) NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'rewarded', 'cancelled')),
+      reward_seconds INTEGER NOT NULL CHECK (reward_seconds > 0),
+      rewarded_at TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      CHECK (referrer_id <> referred_user_id)
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_referrals_referrer_created ON referrals(referrer_id, created_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_referrals_status ON referrals(status);`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS top_up_credits (
+      id BIGSERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      billing_order_id VARCHAR(36) UNIQUE REFERENCES billing_orders(id) ON DELETE RESTRICT,
+      referral_id BIGINT UNIQUE REFERENCES referrals(id) ON DELETE SET NULL,
+      product_code VARCHAR(40) NOT NULL,
+      seconds_granted INTEGER NOT NULL CHECK (seconds_granted > 0),
+      remaining_seconds INTEGER NOT NULL CHECK (remaining_seconds >= 0),
+      starts_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`ALTER TABLE top_up_credits ALTER COLUMN billing_order_id DROP NOT NULL;`);
+  await pool.query(`ALTER TABLE top_up_credits ALTER COLUMN expires_at DROP NOT NULL;`);
+  await pool.query(`ALTER TABLE top_up_credits ADD COLUMN IF NOT EXISTS referral_id BIGINT;`);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'top_up_credits_referral_id_fkey'
+      ) THEN
+        ALTER TABLE top_up_credits
+          ADD CONSTRAINT top_up_credits_referral_id_fkey
+          FOREIGN KEY (referral_id) REFERENCES referrals(id) ON DELETE SET NULL;
+      END IF;
+    END
+    $$;
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_top_up_credits_referral_id_unique ON top_up_credits(referral_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_top_up_credits_user_expiry ON top_up_credits(user_id, expires_at) WHERE remaining_seconds > 0;`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS payments (
@@ -610,6 +935,43 @@ async function initDatabase() {
   );
 
   console.log("Đã kiểm tra/tạo bảng PostgreSQL thành công");
+  if (process.env.CREATE_DEMO_USER === 'true' && !IS_PRODUCTION) {
+    const demoPassword = await bcrypt.hash('123456', 12);
+    await pool.query(
+      `INSERT INTO users (first_name, last_name, email, password)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (email) DO NOTHING`,
+      ['Demo', 'User', 'demo@vbee.local', demoPassword]
+    );
+  }
+  if (IS_PRODUCTION) {
+    await pool.query("DELETE FROM users WHERE email = 'demo@vbee.local'");
+  }
+
+  await pool.query(`DELETE FROM auth_refresh_tokens WHERE expires_at < NOW() - INTERVAL '7 days';`);
+  await pool.query(`DELETE FROM rate_limit_counters WHERE reset_at < NOW() - INTERVAL '1 day';`);
+  await pool.query(`DELETE FROM password_reset_tokens WHERE expires_at < NOW() - INTERVAL '7 days' OR used_at < NOW() - INTERVAL '30 days';`);
+  await pool.query(`DELETE FROM realtime_sessions WHERE status <> 'active' AND ended_at < NOW() - INTERVAL '30 days';`);
+  await pool.query(
+    `DELETE FROM security_audit_events
+     WHERE created_at < NOW() - ($1::text || ' days')::interval`,
+    [String(SECURITY_AUDIT_RETENTION_DAYS)],
+  );
+
+  const { rows: storedFilenames } = await pool.query(
+    'SELECT id, filename FROM transcriptions WHERE filename IS NOT NULL',
+  );
+  for (const item of storedFilenames) {
+    const normalizedFilename = normalizeFilename(item.filename);
+    if (normalizedFilename !== item.filename) {
+      await pool.query('UPDATE transcriptions SET filename = $1 WHERE id = $2', [
+        normalizedFilename,
+        item.id,
+      ]);
+    }
+  }
+
+  console.log('Đã kiểm tra/tạo bảng PostgreSQL thành công');
 }
 
 module.exports = initDatabase;

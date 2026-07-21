@@ -113,10 +113,11 @@ export function VbeeSupportWidget() {
       return;
     }
 
+    const authToken = token;
     let cancelled = false;
     async function loadQuota() {
       try {
-        const data = await fetchQuota(token);
+        const data = await fetchQuota(authToken);
         if (!cancelled) setQuota(data);
       } catch {
         if (!cancelled) setQuota(null);
@@ -134,11 +135,12 @@ export function VbeeSupportWidget() {
   useEffect(() => {
     if (!open || view !== "messages" || !token) return;
 
+    const authToken = token;
     let cancelled = false;
     async function loadTickets() {
       setIsLoadingTickets(true);
       try {
-        const data = await fetchSupportTickets(token);
+        const data = await fetchSupportTickets(authToken);
         if (!cancelled) {
           setTickets(data.tickets);
           setError("");

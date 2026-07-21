@@ -9,46 +9,36 @@ import {
   Check,
   Clock,
   Download,
+  Eye,
+  EyeOff,
   FileAudio,
   Folder,
   FolderPlus,
   Gift,
   Heart,
-  History,
   Home,
+  KeyRound,
   Languages,
-  LogOut,
   MessageCircle,
   Mic,
-  Pencil,
-  PlugZap,
   Radio,
   Settings,
   SlidersHorizontal,
   Upload,
   UploadCloud,
-  User,
   X,
   Zap,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import vbeeLogo from "@/assets/vbee-logo.png";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { AuthenticatedHeader } from "@/components/auth-app-header";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { QuotaStatusPanel } from "@/components/quota-status-panel";
 import { PhilosophyQuoteCard } from "@/components/philosophy-quote-card";
+import { VbeeAccountUsageCard } from "@/components/vbee-preferences-layout";
 
 const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ??
@@ -72,6 +62,10 @@ interface HistoryItem {
   filename: string;
   duration: number | null;
   text: string;
+  status: "queued" | "processing" | "completed" | "failed" | "cancelled";
+  progress?: number;
+  error_message?: string | null;
+  translation_error?: string | null;
   created_at: string;
 }
 
@@ -99,26 +93,40 @@ function formatDate(value: string) {
 }
 
 export const Route = createFileRoute("/dashboard")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    token: search.token as string | undefined,
-  }),
   component: DashboardPage,
 });
 
 function DashboardPage() {
-  const { token: urlToken } = Route.useSearch();
-  const { user, isLoading, token, setToken, updateUser, logout } = useAuth();
+  const { user, isLoading, token, updateUser, logout } = useAuth();
   const navigate = useNavigate();
 
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
   useEffect(() => {
     if (!user || !token) return;
-    void fetch(`${API_URL}/api/transcribe/history`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => (r.ok ? (r.json() as Promise<HistoryItem[]>) : []))
-      .then((data) => setHistory(data.slice(0, 3)));
+    let active = true;
+    const loadHistory = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/transcribe/history`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const data = response.ok
+          ? ((await response.json()) as HistoryItem[])
+          : [];
+        if (active) setHistory(data.slice(0, 3));
+      } catch {
+        // Keep the current workspace list when a background refresh fails.
+      }
+    };
+    void loadHistory();
+    const interval = window.setInterval(() => void loadHistory(), 8_000);
+    window.addEventListener("focus", loadHistory);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", loadHistory);
+    };
   }, [user, token]);
 
   // ── Edit profile state ──────────────────────────────────────────────
@@ -129,6 +137,19 @@ function DashboardPage() {
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [profileSuccess, setProfileSuccess] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [showPasswords, setShowPasswords] = useState({
+    current: false,
+    next: false,
+    confirm: false,
+  });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
   const [folderOpen, setFolderOpen] = useState(false);
   const [folderName, setFolderName] = useState("Dự án mới");
   const [activeFolder, setActiveFolder] = useState("Dự án mới");
@@ -137,27 +158,14 @@ function DashboardPage() {
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Xử lý token từ URL (sau OAuth redirect)
   useEffect(() => {
-    if (urlToken) {
-      setToken(urlToken);
-      void navigate({
-        to: "/dashboard",
-        replace: true,
-        search: { token: undefined },
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!isLoading && !user && !urlToken) {
+    if (!isLoading && !user) {
       void navigate({
         to: "/login",
         search: { error: undefined, from: "/dashboard" },
       });
     }
-  }, [user, isLoading, urlToken, navigate]);
+  }, [user, isLoading, navigate]);
 
   useEffect(() => {
     if (user)
@@ -165,17 +173,20 @@ function DashboardPage() {
   }, [user]);
 
   // ── Handlers ────────────────────────────────────────────────────────
-  function handleLogout() {
-    logout();
-    window.location.href = "/login";
-  }
-
   function openEdit() {
     if (user)
       setEditForm({ firstName: user.firstName, lastName: user.lastName });
     setAvatarPreview(null);
     setProfileError("");
     setProfileSuccess(false);
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+    setShowPasswords({ current: false, next: false, confirm: false });
+    setPasswordError("");
+    setPasswordSuccess("");
     setEditOpen(true);
   }
 
@@ -184,6 +195,13 @@ function DashboardPage() {
     setAvatarPreview(null);
     setProfileError("");
     setProfileSuccess(false);
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+    setPasswordError("");
+    setPasswordSuccess("");
   }
 
   function resizeImage(file: File): Promise<string> {
@@ -294,6 +312,72 @@ function DashboardPage() {
     }
   }
 
+  async function handleChangePassword() {
+    if (!token) return;
+    const { currentPassword, newPassword, confirmPassword } = passwordForm;
+    setPasswordError("");
+    setPasswordSuccess("");
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordError("Vui lòng nhập đầy đủ ba ô mật khẩu");
+      return;
+    }
+    if (newPassword.length < 12) {
+      setPasswordError("Mật khẩu mới phải có ít nhất 12 ký tự");
+      return;
+    }
+    if (newPassword.length > 128) {
+      setPasswordError("Mật khẩu mới không được vượt quá 128 ký tự");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Xác nhận mật khẩu mới chưa khớp");
+      return;
+    }
+    if (currentPassword === newPassword) {
+      setPasswordError("Mật khẩu mới phải khác mật khẩu hiện tại");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const res = await fetch(`${API_URL}/api/auth/change-password`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        setPasswordError(data.error ?? "Không đổi được mật khẩu");
+        return;
+      }
+
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+      setPasswordSuccess(
+        data.message ?? "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.",
+      );
+      window.setTimeout(() => {
+        logout();
+        window.location.href = "/login";
+      }, 1400);
+    } catch {
+      setPasswordError("Không kết nối được máy chủ. Vui lòng thử lại.");
+    } finally {
+      setIsChangingPassword(false);
+    }
+  }
+
   function handleCreateFolder() {
     const name = folderName.trim();
     if (!name) return;
@@ -365,7 +449,7 @@ function DashboardPage() {
   }
 
   // ── Loading ──────────────────────────────────────────────────────────
-  if (isLoading || (urlToken && !user)) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -403,99 +487,7 @@ function DashboardPage() {
         />
       ))}
 
-      {/* ── Header ───────────────────────────────────────────────────── */}
-      <header className="relative z-30 border-b border-border bg-background/70 backdrop-blur-md">
-        <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
-          <Link to="/" className="flex items-center">
-            <img
-              src={vbeeLogo}
-              alt="Vbee"
-              className="h-14 w-auto object-contain"
-            />
-          </Link>
-
-          <div className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
-            <Link to="/upload" className="hover:text-foreground transition">
-              Tải file lên
-            </Link>
-            <Link to="/record" className="hover:text-foreground transition">
-              Ghi âm
-            </Link>
-            <Link
-              to="/realtime"
-              className="hover:text-foreground transition flex items-center gap-1.5"
-            >
-              <Radio className="h-3.5 w-3.5" />
-              Realtime
-            </Link>
-            <Link
-              to="/history"
-              className="hover:text-foreground transition flex items-center gap-1.5"
-            >
-              <History className="h-3.5 w-3.5" />
-              Lịch sử
-            </Link>
-            <Link
-              to="/api"
-              className="hover:text-foreground transition flex items-center gap-1.5"
-            >
-              <PlugZap className="h-3.5 w-3.5" />
-              API
-            </Link>
-          </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 rounded-full border border-border bg-card/60 px-3 py-1.5 hover:bg-card transition focus:outline-none focus:ring-2 focus:ring-primary/50">
-                {user.avatar ? (
-                  <img
-                    src={user.avatar}
-                    alt="avatar"
-                    className="h-8 w-8 rounded-full object-cover ring-1 ring-primary/40"
-                  />
-                ) : (
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-primary text-xs font-bold text-primary-foreground shadow-glow select-none">
-                    {initials}
-                  </span>
-                )}
-                <span className="hidden sm:block text-sm font-medium text-foreground max-w-[120px] truncate">
-                  {user.firstName} {user.lastName}
-                </span>
-                <User className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="w-56 bg-card border-border"
-            >
-              <DropdownMenuLabel className="pb-1">
-                <p className="text-sm font-semibold text-foreground">
-                  {user.firstName} {user.lastName}
-                </p>
-                <p className="text-xs text-muted-foreground font-normal truncate">
-                  {user.email}
-                </p>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="gap-2 cursor-pointer hover:bg-primary/10 focus:bg-primary/10"
-                onSelect={openEdit}
-              >
-                <Pencil className="h-4 w-4 text-primary" />
-                Chỉnh sửa thông tin
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="gap-2 cursor-pointer text-destructive hover:bg-destructive/10 focus:bg-destructive/10"
-                onSelect={handleLogout}
-              >
-                <LogOut className="h-4 w-4" />
-                Đăng xuất
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </nav>
-      </header>
+      <AuthenticatedHeader onEditProfile={openEdit} />
 
       {/* ── Main ─────────────────────────────────────────────────────── */}
       <main className="relative z-10 mx-auto grid max-w-7xl gap-6 px-4 py-8 md:px-6 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -508,7 +500,7 @@ function DashboardPage() {
                   Không gian làm việc sẵn sàng
                 </div>
                 <div className="flex items-center gap-3">
-                  <Heart className="h-10 w-10 text-primary" />
+                  <Heart className="h-10 w-10 text-[#ffcb05]" />
                   <h1 className="text-2xl font-light tracking-tight text-foreground md:text-3xl">
                     Chào mừng, {user.firstName}
                   </h1>
@@ -555,10 +547,10 @@ function DashboardPage() {
               </Link>
               <Link
                 to="/realtime"
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-5 py-3 text-sm font-black text-primary transition hover:bg-primary/20"
+                className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-border bg-white text-[#756894] shadow-sm transition hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+                title="Realtime"
               >
                 <Radio className="h-4 w-4" />
-                REALTIME
               </Link>
             </div>
 
@@ -658,29 +650,12 @@ function DashboardPage() {
         </section>
 
         <aside className="space-y-5 lg:pt-28">
-          <div className="rounded-2xl border border-border bg-card/85 p-6 shadow-soft">
-            <div className="mb-5 flex items-center gap-3">
-              {user.avatar ? (
-                <img
-                  src={user.avatar}
-                  alt="avatar"
-                  className="h-12 w-12 rounded-full object-cover ring-2 ring-primary/40"
-                />
-              ) : (
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-primary font-black text-primary-foreground shadow-glow">
-                  {initials}
-                </span>
-              )}
-              <h2 className="text-xl font-bold leading-tight">
-                Xin chào,
-                <br />
-                {user.firstName}
-              </h2>
-            </div>
+          <VbeeAccountUsageCard
+            firstName={user.firstName}
+            showReferral={false}
+          />
 
-            <div className="mb-5">
-              <QuotaStatusPanel />
-            </div>
+          <div className="rounded-2xl border border-border bg-card/85 p-6 shadow-soft">
 
             <DashboardSideSection
               title="TÙY CHỈNH"
@@ -714,27 +689,19 @@ function DashboardPage() {
               onAction={openFeature}
             />
 
-            <button
-              onClick={() =>
-                setActionDialog({
-                  title: "Giới thiệu bạn bè",
-                  description:
-                    "Chương trình giới thiệu bạn bè sẽ cấp phút miễn phí sau khi người được mời đăng ký và dùng thử.",
-                  ctaLabel: "Mở trang chủ",
-                  to: "/",
-                })
-              }
-              className="mt-5 w-full rounded-xl border border-border bg-background/35 p-4 text-left transition hover:border-primary/50 hover:bg-primary/10"
+            <Link
+              to="/referral"
+              className="mt-5 flex w-full items-center rounded-xl border border-[#e5dfef] bg-[#fbf8ef] p-4 text-left transition hover:border-[#ffcb05] hover:bg-[#fff8d7]"
             >
               <div className="flex items-center gap-3">
-                <Gift className="h-8 w-8 text-primary" />
-                <p className="text-sm font-black leading-5 text-primary">
+                <Gift className="h-8 w-8 text-[#21104a]" />
+                <p className="text-sm font-black leading-5 text-[#21104a]">
                   GIỚI THIỆU BẠN BÈ
                   <br />
                   NHẬN 100 PHÚT MIỄN PHÍ
                 </p>
               </div>
-            </button>
+            </Link>
           </div>
 
           <PhilosophyQuoteCard />
@@ -753,10 +720,10 @@ function DashboardPage() {
       <Dialog
         open={editOpen}
         onOpenChange={(open) => {
-          if (!open) closeEdit();
+          if (!open && !isChangingPassword) closeEdit();
         }}
       >
-        <DialogContent className="bg-card border-border text-foreground sm:max-w-md">
+        <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto bg-card border-border text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-foreground text-xl">
               Chỉnh sửa thông tin
@@ -856,17 +823,219 @@ function DashboardPage() {
               </p>
             </div>
 
+            <section className="border-t border-border pt-4">
+              <div className="mb-3 flex items-start gap-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#fff8d7] text-[#21104a]">
+                  <KeyRound className="h-4 w-4" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">
+                    Đổi mật khẩu
+                  </h3>
+                  <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                    Mật khẩu mới cần ít nhất 12 ký tự. Sau khi đổi, bạn sẽ
+                    đăng nhập lại trên các thiết bị.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex flex-col gap-1.5">
+                  <label
+                    htmlFor="current-password"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    Mật khẩu hiện tại
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="current-password"
+                      type={showPasswords.current ? "text" : "password"}
+                      autoComplete="current-password"
+                      value={passwordForm.currentPassword}
+                      onChange={(event) => {
+                        setPasswordForm((previous) => ({
+                          ...previous,
+                          currentPassword: event.target.value,
+                        }));
+                        setPasswordError("");
+                        setPasswordSuccess("");
+                      }}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowPasswords((previous) => ({
+                          ...previous,
+                          current: !previous.current,
+                        }))
+                      }
+                      className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground transition hover:text-foreground"
+                      aria-label={
+                        showPasswords.current
+                          ? "Ẩn mật khẩu hiện tại"
+                          : "Hiện mật khẩu hiện tại"
+                      }
+                    >
+                      {showPasswords.current ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label
+                      htmlFor="new-password"
+                      className="text-xs font-medium text-muted-foreground"
+                    >
+                      Mật khẩu mới
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="new-password"
+                        type={showPasswords.next ? "text" : "password"}
+                        autoComplete="new-password"
+                        value={passwordForm.newPassword}
+                        onChange={(event) => {
+                          setPasswordForm((previous) => ({
+                            ...previous,
+                            newPassword: event.target.value,
+                          }));
+                          setPasswordError("");
+                          setPasswordSuccess("");
+                        }}
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowPasswords((previous) => ({
+                            ...previous,
+                            next: !previous.next,
+                          }))
+                        }
+                        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground transition hover:text-foreground"
+                        aria-label={
+                          showPasswords.next
+                            ? "Ẩn mật khẩu mới"
+                            : "Hiện mật khẩu mới"
+                        }
+                      >
+                        {showPasswords.next ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label
+                      htmlFor="confirm-password"
+                      className="text-xs font-medium text-muted-foreground"
+                    >
+                      Xác nhận mật khẩu
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="confirm-password"
+                        type={showPasswords.confirm ? "text" : "password"}
+                        autoComplete="new-password"
+                        value={passwordForm.confirmPassword}
+                        onChange={(event) => {
+                          setPasswordForm((previous) => ({
+                            ...previous,
+                            confirmPassword: event.target.value,
+                          }));
+                          setPasswordError("");
+                          setPasswordSuccess("");
+                        }}
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowPasswords((previous) => ({
+                            ...previous,
+                            confirm: !previous.confirm,
+                          }))
+                        }
+                        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground transition hover:text-foreground"
+                        aria-label={
+                          showPasswords.confirm
+                            ? "Ẩn mật khẩu xác nhận"
+                            : "Hiện mật khẩu xác nhận"
+                        }
+                      >
+                        {showPasswords.confirm ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {passwordError && (
+                  <div
+                    role="alert"
+                    className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs leading-5 text-destructive"
+                  >
+                    <X className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    {passwordError}
+                  </div>
+                )}
+                {passwordSuccess && (
+                  <div
+                    role="status"
+                    className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-xs leading-5 text-primary"
+                  >
+                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    {passwordSuccess}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => void handleChangePassword()}
+                  disabled={isChangingPassword || Boolean(passwordSuccess)}
+                  className="flex w-full items-center justify-center gap-2 rounded-full border border-[#e8decc] bg-[#fff8d7] py-2.5 text-sm font-bold text-[#21104a] transition hover:border-[#ffcb05] hover:bg-[#ffefad] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isChangingPassword ? (
+                    <>
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#21104a]/25 border-t-[#21104a]" />
+                      Đang đổi mật khẩu...
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound className="h-4 w-4" />
+                      Cập nhật mật khẩu
+                    </>
+                  )}
+                </button>
+              </div>
+            </section>
+
             <div className="flex gap-3 pt-1">
               <button
                 onClick={closeEdit}
-                disabled={isSavingProfile}
+                disabled={isSavingProfile || isChangingPassword}
                 className="flex-1 rounded-full border border-border py-2.5 text-sm font-medium text-foreground hover:bg-card transition disabled:opacity-50"
               >
                 Hủy
               </button>
               <button
                 onClick={() => void handleSaveProfile()}
-                disabled={isSavingProfile || isSavingAvatar}
+                disabled={
+                  isSavingProfile || isSavingAvatar || isChangingPassword
+                }
                 className="flex-1 flex items-center justify-center gap-2 rounded-full bg-gradient-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-glow hover:opacity-90 transition disabled:opacity-60"
               >
                 {isSavingProfile ? (
@@ -1047,6 +1216,19 @@ function CustomerJourneyPanel() {
 
 function WorkspaceFileRow({ item }: { item: HistoryItem }) {
   const Icon = item.filename.startsWith("recording.") ? Mic : AudioLines;
+  const isActive = item.status === "queued" || item.status === "processing";
+  const isFailed = item.status === "failed";
+  const isCancelled = item.status === "cancelled";
+  const statusLabel =
+    item.status === "queued"
+      ? "Đang chờ"
+      : item.status === "processing"
+        ? "Đang xử lý"
+        : isFailed
+          ? "Lỗi"
+          : isCancelled
+            ? "Đã hủy"
+            : "Đã chuyển thành văn bản";
 
   return (
     <Link
@@ -1061,10 +1243,36 @@ function WorkspaceFileRow({ item }: { item: HistoryItem }) {
         </span>
 
         <p className="font-black text-muted-foreground">Trạng thái</p>
-        <span className="inline-flex w-fit min-w-36 items-center justify-center gap-2 rounded-md bg-emerald-500 px-4 py-2 text-xs font-black text-white">
-          <Check className="h-3.5 w-3.5" />
-          Đã chuyển thành văn bản
-        </span>
+        <div>
+          <span
+            className={`inline-flex w-fit min-w-36 items-center justify-center gap-2 rounded-md px-4 py-2 text-xs font-black ${
+              isFailed || isCancelled
+                ? "bg-destructive/15 text-destructive"
+                : isActive
+                  ? "bg-primary/10 text-primary"
+                  : "bg-emerald-500 text-white"
+            }`}
+          >
+            {isActive ? (
+              <span className="h-3.5 w-3.5 rounded-full border-2 border-primary/35 border-t-primary animate-spin" />
+            ) : isFailed || isCancelled ? (
+              <X className="h-3.5 w-3.5" />
+            ) : (
+              <Check className="h-3.5 w-3.5" />
+            )}
+            {statusLabel}
+          </span>
+          {isFailed && (
+            <p className="mt-2 text-xs font-semibold leading-5 text-destructive">
+              {item.error_message || "Job xử lý thất bại"}
+            </p>
+          )}
+          {!isFailed && item.translation_error && (
+            <p className="mt-2 text-xs font-semibold leading-5 text-destructive">
+              Transcript đã hoàn thành nhưng bản dịch bị lỗi: {item.translation_error}
+            </p>
+          )}
+        </div>
 
         <p className="font-black text-muted-foreground">Thời lượng</p>
         <p className="font-semibold">{formatDuration(item.duration)}</p>

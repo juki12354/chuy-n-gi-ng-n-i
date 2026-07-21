@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   History,
   AudioLines,
@@ -16,17 +16,13 @@ import {
   Search,
   Home,
   Upload,
-  FolderPlus,
+  Radio,
+  CircleStop,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import { AuthenticatedHeader } from "@/components/auth-app-header";
-import {
-  TranscriptSegments,
-  type TranscriptSegment,
-} from "@/components/transcript-segments";
 import { languageLabel } from "@/lib/language-options";
-import { downloadSrt } from "@/lib/srt";
 
 const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ??
@@ -46,13 +42,18 @@ interface HistoryItem {
   processing_seconds: number | null;
   text: string;
   words: Word[] | null;
-  segments: TranscriptSegment[] | null;
-  speaker_names: Record<string, string> | null;
   audio_filename: string | null;
   source_language: string | null;
   translated_text: string | null;
   translation_target_language: string | null;
   translation_provider: string | null;
+  translation_error: string | null;
+  status: "queued" | "processing" | "completed" | "failed" | "cancelled";
+  progress: number;
+  error_message: string | null;
+  job_id: number | null;
+  queue_position?: number;
+  estimated_remaining_seconds?: number;
   created_at: string;
 }
 
@@ -97,8 +98,10 @@ function HistoryPage() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [cancelling, setCancelling] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [localChanged, setLocalChanged] = useState(false);
+  const [editorText, setEditorText] = useState("");
   const [search, setSearch] = useState("");
   // blob URLs keyed by item id — loaded on first expand
   const [itemAudioUrls, setItemAudioUrls] = useState<Record<number, string>>(
@@ -108,13 +111,14 @@ function HistoryPage() {
 
   // Single set of refs — only one item can be expanded at a time
   const audioRef = useRef<HTMLAudioElement>(null);
-  const editRef = useRef<HTMLDivElement>(null);
-  const spanRefs = useRef<HTMLSpanElement[]>([]);
-  const activeIdxRef = useRef(-1);
-  const wordsRef = useRef<Word[]>([]);
   const itemsRef = useRef<HistoryItem[]>([]);
   // Tracks which IDs have already been fetched (avoids re-fetch on re-expand)
   const fetchedIds = useRef<Set<number>>(new Set());
+  const expandedItem =
+    expanded === null ? null : items.find((item) => item.id === expanded);
+  const expandedItemStatus = expandedItem?.status ?? null;
+  const expandedItemText = expandedItem?.text ?? "";
+  const expandedItemAudioFilename = expandedItem?.audio_filename ?? null;
 
   useEffect(() => {
     itemsRef.current = items;
@@ -125,11 +129,41 @@ function HistoryPage() {
         const q = search.toLowerCase();
         return (
           i.filename.toLowerCase().includes(q) ||
-          i.text.toLowerCase().includes(q) ||
+          String(i.text || "")
+            .toLowerCase()
+            .includes(q) ||
           (i.translated_text ?? "").toLowerCase().includes(q)
         );
       })
     : items;
+  const completedCount = items.filter((item) => item.status === "completed").length;
+  const hasActiveJobs = items.some(
+    (item) => item.status === "queued" || item.status === "processing",
+  );
+
+  const loadHistory = useCallback(
+    async (showLoading = false) => {
+      if (!user || !token) return;
+      if (showLoading) setLoading(true);
+      try {
+        const res = await fetch(`${API_URL}/api/transcribe/history`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = (await res.json()) as HistoryItem[];
+          setItems(
+            data.map((item) => ({
+              ...item,
+              text: String(item.text || ""),
+            })),
+          );
+        }
+      } finally {
+        if (showLoading) setLoading(false);
+      }
+    },
+    [token, user],
+  );
 
   useEffect(() => {
     if (!isLoading && !user)
@@ -140,69 +174,34 @@ function HistoryPage() {
   }, [user, isLoading, navigate]);
 
   useEffect(() => {
-    if (!user || !token) return;
-    void (async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/transcribe/history`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) setItems((await res.json()) as HistoryItem[]);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [user, token]);
+    void loadHistory(true);
+  }, [loadHistory]);
 
-  // When expanded changes: rebuild word spans + auto-fetch audio from server
   useEffect(() => {
-    const div = editRef.current;
+    if (!hasActiveJobs) return;
+    const interval = window.setInterval(() => void loadHistory(), 3500);
+    return () => window.clearInterval(interval);
+  }, [hasActiveJobs, loadHistory]);
 
-    // Pause old audio
+  // Keep the editor controlled by React so polling and rerenders cannot clear it.
+  useEffect(() => {
+    setLocalChanged(false);
+    setEditorText(
+      expandedItemStatus === "completed" ? String(expandedItemText || "") : "",
+    );
+  }, [expanded, expandedItemStatus, expandedItemText]);
+
+  // Auto-fetch audio from server if not yet loaded.
+  useEffect(() => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
-
-    // Clear previous DOM state
-    if (div) {
-      div.innerHTML = "";
-    }
-    spanRefs.current = [];
-    activeIdxRef.current = -1;
-    wordsRef.current = [];
-    setLocalChanged(false);
-
-    if (expanded === null || !div) return;
-
-    const item = itemsRef.current.find((i) => i.id === expanded);
-    if (!item) return;
-
-    // Build word spans
-    const ws: Word[] = Array.isArray(item.words) ? item.words : [];
-    wordsRef.current = ws;
-
-    if (ws.length === 0) {
-      div.textContent = item.text;
-    } else {
-      ws.forEach((w, i) => {
-        const span = document.createElement("span");
-        span.className =
-          "cursor-pointer rounded px-0.5 transition-colors duration-100 hover:bg-primary/15";
-        span.textContent = w.text;
-        span.onclick = () => {
-          if (audioRef.current) {
-            audioRef.current.currentTime = w.start / 1000;
-            void audioRef.current.play();
-          }
-        };
-        div.appendChild(span);
-        if (i < ws.length - 1) div.appendChild(document.createTextNode(" "));
-        spanRefs.current.push(span);
-      });
-    }
-
-    // Auto-fetch audio from server if not yet loaded
-    if (item.audio_filename && !fetchedIds.current.has(expanded)) {
+    if (
+      expanded !== null &&
+      expandedItemAudioFilename &&
+      !fetchedIds.current.has(expanded)
+    ) {
       fetchedIds.current.add(expanded);
       setAudioLoading(true);
       void fetch(`${API_URL}/api/transcribe/${expanded}/audio`, {
@@ -216,68 +215,17 @@ function HistoryPage() {
         })
         .finally(() => setAudioLoading(false));
     }
-  }, [expanded, token]);
-
-  function handleTimeUpdate() {
-    if (!audioRef.current || wordsRef.current.length === 0) return;
-    const ms = audioRef.current.currentTime * 1000;
-    let newIdx = -1;
-    for (let i = 0; i < wordsRef.current.length; i++) {
-      if (wordsRef.current[i].start <= ms) newIdx = i;
-      else break;
-    }
-    if (newIdx === activeIdxRef.current) return;
-    const prev = spanRefs.current[activeIdxRef.current];
-    if (prev) {
-      prev.classList.remove(
-        "bg-primary",
-        "text-primary-foreground",
-        "font-medium",
-      );
-      prev.classList.add("hover:bg-primary/15");
-    }
-    const cur = spanRefs.current[newIdx];
-    if (cur) {
-      cur.classList.add("bg-primary", "text-primary-foreground", "font-medium");
-      cur.classList.remove("hover:bg-primary/15");
-      cur.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-    activeIdxRef.current = newIdx;
-  }
+  }, [expanded, expandedItemAudioFilename, token]);
 
   function resetEdit() {
     const item = itemsRef.current.find((i) => i.id === expanded);
-    if (!item || !editRef.current) return;
-    const ws: Word[] = Array.isArray(item.words) ? item.words : [];
-    editRef.current.innerHTML = "";
-    spanRefs.current = [];
-    activeIdxRef.current = -1;
-    if (ws.length > 0) {
-      wordsRef.current = ws;
-      ws.forEach((w, i) => {
-        const span = document.createElement("span");
-        span.className =
-          "cursor-pointer rounded px-0.5 transition-colors duration-100 hover:bg-primary/15";
-        span.textContent = w.text;
-        span.onclick = () => {
-          if (audioRef.current) {
-            audioRef.current.currentTime = w.start / 1000;
-            void audioRef.current.play();
-          }
-        };
-        editRef.current!.appendChild(span);
-        if (i < ws.length - 1)
-          editRef.current!.appendChild(document.createTextNode(" "));
-        spanRefs.current.push(span);
-      });
-    } else {
-      editRef.current.textContent = item.text;
-    }
+    if (!item) return;
+    setEditorText(String(item.text || ""));
     setLocalChanged(false);
   }
 
   async function handleSaveEdit(id: number) {
-    const text = editRef.current?.textContent ?? "";
+    const text = editorText;
     setIsSaving(true);
     try {
       const res = await fetch(`${API_URL}/api/transcribe/${id}`, {
@@ -298,10 +246,7 @@ function HistoryPage() {
   }
 
   async function handleCopy(item: HistoryItem) {
-    const text =
-      expanded === item.id && editRef.current
-        ? (editRef.current.textContent ?? item.text)
-        : item.text;
+    const text = expanded === item.id ? editorText : item.text;
     await navigator.clipboard.writeText(text);
     setCopied(item.id);
     setTimeout(() => setCopied(null), 2000);
@@ -330,11 +275,25 @@ function HistoryPage() {
     }
   }
 
+  async function handleCancel(item: HistoryItem) {
+    if (!item.job_id || !token) return;
+    setCancelling(item.id);
+    try {
+      const response = await fetch(
+        `${API_URL}/api/transcribe/jobs/${item.job_id}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (response.ok) await loadHistory();
+    } finally {
+      setCancelling(null);
+    }
+  }
+
   async function handleDownload(item: HistoryItem) {
-    const text =
-      expanded === item.id && editRef.current
-        ? (editRef.current.textContent ?? item.text)
-        : item.text;
+    const text = expanded === item.id ? editorText : item.text;
     const baseName = item.filename.replace(/\.[^.]+$/, "");
     const lines = item.translated_text
       ? [
@@ -366,10 +325,7 @@ function HistoryPage() {
   }
 
   function handleDownloadTxt(item: HistoryItem) {
-    const text =
-      expanded === item.id && editRef.current
-        ? (editRef.current.textContent ?? item.text)
-        : item.text;
+    const text = expanded === item.id ? editorText : item.text;
     const baseName = item.filename.replace(/\.[^.]+$/, "");
     const content = item.translated_text
       ? [
@@ -389,54 +345,6 @@ function HistoryPage() {
     a.download = `${baseName}.txt`;
     a.click();
     URL.revokeObjectURL(url);
-  }
-
-  function handleDownloadSrt(item: HistoryItem) {
-    downloadSrt(
-      item.filename,
-      item.words ?? [],
-      item.segments ?? [],
-      item.speaker_names ?? {},
-    );
-  }
-
-  async function handleRenameSpeaker(
-    item: HistoryItem,
-    speaker: string,
-    name: string,
-  ) {
-    const response = await fetch(`${API_URL}/api/transcribe/${item.id}/speakers`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ speaker, name }),
-    });
-    const data = (await response.json()) as {
-      speakerNames?: Record<string, string>;
-      segments?: TranscriptSegment[];
-      text?: string;
-    };
-    if (!response.ok) return;
-
-    if (expanded === item.id && data.text && editRef.current) {
-      editRef.current.textContent = data.text;
-      setLocalChanged(false);
-    }
-
-    setItems((prev) =>
-      prev.map((entry) =>
-        entry.id === item.id
-          ? {
-              ...entry,
-              speaker_names: data.speakerNames ?? entry.speaker_names,
-              segments: data.segments ?? entry.segments,
-              text: data.text ?? entry.text,
-            }
-          : entry,
-      ),
-    );
   }
 
   if (isLoading)
@@ -511,10 +419,13 @@ function HistoryPage() {
           )}
         </div>
 
-        <div className="mb-3 flex items-center justify-center rounded-md border border-border bg-white px-4 py-2 text-sm font-bold text-foreground/85 shadow-soft">
+        <Link
+          to="/dashboard"
+          className="mb-3 flex items-center justify-center rounded-md border border-border bg-white px-4 py-2 text-sm font-bold text-foreground/85 shadow-soft transition hover:border-primary/45 hover:bg-primary/5 hover:text-primary"
+        >
           <Home className="mr-2 h-4 w-4 text-primary" />
-          Lịch sử transcript
-        </div>
+          Không gian làm việc
+        </Link>
 
         <div className="mb-5 grid grid-cols-[1fr_1fr_44px] gap-2 sm:flex">
           <Link
@@ -532,11 +443,11 @@ function HistoryPage() {
             GHI ÂM
           </Link>
           <Link
-            to="/upload"
+            to="/realtime"
             className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-white text-muted-foreground transition hover:border-primary/50 hover:text-primary"
-            title="Tải file lên"
+            title="Realtime"
           >
-            <FolderPlus className="h-4 w-4" />
+            <Radio className="h-4 w-4" />
           </Link>
         </div>
 
@@ -545,6 +456,9 @@ function HistoryPage() {
             ["Tổng số tệp", String(filtered.length)],
             ["Đã chuyển đổi", String(filtered.length)],
             ["Bản ghi âm", String(recordingCount)],
+            ["Total files", String(filtered.length)],
+            ["Đã chuyển đổi", String(completedCount)],
+            ["Recordings", String(recordingCount)],
             ["Thời lượng", formatDuration(totalDuration)],
           ].map(([label, value]) => (
             <div
@@ -598,8 +512,19 @@ function HistoryPage() {
           <div className="flex flex-col gap-3">
             {filtered.map((item) => {
               const isOpen = expanded === item.id;
-              const hasWords =
-                Array.isArray(item.words) && item.words.length > 0;
+              const isCompleted = item.status === "completed";
+              const isActive =
+                item.status === "queued" || item.status === "processing";
+              const statusLabel =
+                item.status === "queued"
+                  ? "Đang chờ"
+                  : item.status === "processing"
+                    ? "Đang xử lý"
+                    : item.status === "failed"
+                      ? "Lỗi"
+                      : item.status === "cancelled"
+                        ? "Đã hủy"
+                      : "Đã chuyển đổi";
               const audioUrl = itemAudioUrls[item.id];
 
               return (
@@ -650,31 +575,64 @@ function HistoryPage() {
                       </div>
                       {!isOpen && (
                         <p className="hidden md:block text-xs text-muted-foreground truncate max-w-xs">
-                          {item.translated_text ||
-                            item.text ||
-                            "Không có văn bản"}
+                          {isCompleted
+                            ? item.translation_error
+                              ? `Bản dịch bị lỗi: ${item.translation_error}`
+                              : item.translated_text || item.text || "Không có văn bản"
+                            : item.status === "failed"
+                              ? item.error_message || "Job xử lý thất bại"
+                              : `${statusLabel}${item.progress ? ` ${item.progress}%` : ""}`}
                         </p>
                       )}
                     </button>
 
-                    <span className="hidden min-w-32 items-center justify-center gap-2 rounded-md bg-emerald-500 px-3 py-2 text-xs font-black text-white sm:inline-flex">
-                      <Check className="h-3.5 w-3.5" />
-                      Đã chuyển đổi
+                    <span
+                      className={`hidden min-w-32 items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-black sm:inline-flex ${
+                        item.status === "failed" || item.status === "cancelled"
+                          ? "bg-destructive/15 text-destructive"
+                          : isActive
+                            ? "bg-primary/10 text-primary"
+                            : "bg-emerald-500 text-white"
+                      }`}
+                    >
+                      {isActive ? (
+                        <span className="h-3.5 w-3.5 rounded-full border-2 border-primary/35 border-t-primary animate-spin" />
+                      ) : item.status === "failed" || item.status === "cancelled" ? (
+                        <X className="h-3.5 w-3.5" />
+                      ) : (
+                        <Check className="h-3.5 w-3.5" />
+                      )}
+                      {statusLabel}
                     </span>
 
                     <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => void handleDelete(item.id)}
-                        disabled={deleting === item.id}
-                        title="Xóa bản ghi"
-                        className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition disabled:opacity-50"
-                      >
-                        {deleting === item.id ? (
-                          <span className="h-3.5 w-3.5 rounded-full border-2 border-destructive/40 border-t-destructive animate-spin" />
-                        ) : (
-                          <Trash2 className="h-3.5 w-3.5" />
-                        )}
-                      </button>
+                      {isActive ? (
+                        <button
+                          onClick={() => void handleCancel(item)}
+                          disabled={cancelling === item.id}
+                          title="Hủy xử lý"
+                          className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                        >
+                          {cancelling === item.id ? (
+                            <span className="h-3.5 w-3.5 rounded-full border-2 border-destructive/40 border-t-destructive animate-spin" />
+                          ) : (
+                            <CircleStop className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => void handleDelete(item.id)}
+                          disabled={deleting === item.id}
+                          title="Xóa bản ghi"
+                          className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition disabled:opacity-50"
+                        >
+                          {deleting === item.id ? (
+                            <span className="h-3.5 w-3.5 rounded-full border-2 border-destructive/40 border-t-destructive animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      )}
                       <button
                         onClick={() => setExpanded(isOpen ? null : item.id)}
                         className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-card transition"
@@ -689,8 +647,39 @@ function HistoryPage() {
                   </div>
 
                   {/* Expanded content */}
-                  {isOpen && (
+                  {isOpen && !isCompleted && (
+                    <div className="flex items-center gap-3 border-t border-border/50 px-5 py-4">
+                      {isActive ? (
+                        <span className="h-5 w-5 shrink-0 rounded-full border-2 border-primary/35 border-t-primary animate-spin" />
+                      ) : (
+                        <X className="h-5 w-5 shrink-0 text-destructive" />
+                      )}
+                      <div>
+                        <p className="text-sm font-black text-foreground">
+                          {isActive
+                            ? `${statusLabel}. Bạn có thể rời trang, lịch sử sẽ tự cập nhật.`
+                            : "Job chưa hoàn tất."}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                          {item.status === "failed"
+                            ? item.error_message || "Không thể xử lý file này."
+                            : item.status === "cancelled"
+                              ? "Job đã được hủy và không trừ quota."
+                              : item.status === "processing"
+                                ? `Tiến độ hiện tại: ${item.progress || 10}%. Dự kiến còn ${formatDuration(item.estimated_remaining_seconds)}.`
+                                : `Vị trí hàng đợi: ${item.queue_position || 1}. Dự kiến còn ${formatDuration(item.estimated_remaining_seconds)}.`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {isOpen && isCompleted && (
                     <div className="px-5 pb-5 flex flex-col gap-3 border-t border-border/50 pt-4">
+                      {item.translation_error && (
+                        <div className="rounded-lg border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm font-semibold leading-6 text-destructive">
+                          Transcript gốc đã hoàn thành nhưng bản dịch bị lỗi: {item.translation_error}
+                        </div>
+                      )}
                       {/* Audio player — auto-loaded from server */}
                       {item.audio_filename && (
                         <div>
@@ -702,15 +691,12 @@ function HistoryPage() {
                           ) : audioUrl ? (
                             <div className="flex flex-col gap-1.5">
                               <p className="text-xs text-muted-foreground">
-                                {hasWords
-                                  ? "Nhấn vào từ trong văn bản để tua đến đoạn đó"
-                                  : "Nghe lại bản ghi"}
+                                Nghe lại bản ghi
                               </p>
                               <audio
                                 ref={audioRef}
                                 src={audioUrl}
                                 controls
-                                onTimeUpdate={handleTimeUpdate}
                                 className="w-full h-10 rounded-xl"
                               />
                             </div>
@@ -718,32 +704,19 @@ function HistoryPage() {
                         </div>
                       )}
 
-                      {/* ContentEditable text — always editable inline */}
-                      <TranscriptSegments
-                        segments={item.segments ?? []}
-                        audioRef={audioRef}
-                        speakerNames={item.speaker_names ?? {}}
-                        onRenameSpeaker={(speaker, name) =>
-                          handleRenameSpeaker(item, speaker, name)
-                        }
-                      />
-
-                      <div className="rounded-2xl border border-border bg-background/60 px-5 py-4">
+                      {/* Controlled text editor — stable across polling/rerenders */}
+                      <div className="rounded-lg border border-border bg-[#fbf8ef] px-4 py-3">
                         <p className="text-xs text-muted-foreground mb-2">
                           Văn bản — có thể chỉnh sửa trực tiếp
                         </p>
-                        <div
-                          ref={editRef}
-                          contentEditable
-                          suppressContentEditableWarning
-                          onInput={() => {
-                            const current = editRef.current?.textContent ?? "";
-                            const original =
-                              itemsRef.current.find((i) => i.id === expanded)
-                                ?.text ?? "";
-                            setLocalChanged(current !== original);
+                        <textarea
+                          value={editorText}
+                          onChange={(event) => {
+                            const nextText = event.target.value;
+                            setEditorText(nextText);
+                            setLocalChanged(nextText !== String(item.text || ""));
                           }}
-                          className="max-h-64 overflow-y-auto outline-none text-sm text-foreground leading-[2.2] whitespace-pre-wrap min-h-[5rem]"
+                          className="min-h-40 max-h-80 w-full resize-y overflow-y-auto bg-transparent outline-none text-sm text-foreground leading-7"
                         />
                       </div>
 
@@ -804,16 +777,6 @@ function HistoryPage() {
                           className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-semibold text-primary transition hover:bg-primary/20"
                         >
                           <Download className="h-3 w-3" /> Tải .txt
-                        </button>
-                        <button
-                          onClick={() => handleDownloadSrt(item)}
-                          disabled={
-                            (!item.segments || item.segments.length === 0) &&
-                            (!item.words || item.words.length === 0)
-                          }
-                          className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-semibold text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-45"
-                        >
-                          <Download className="h-3 w-3" /> Tải .srt
                         </button>
                         <button
                           onClick={() => void handleDownload(item)}
