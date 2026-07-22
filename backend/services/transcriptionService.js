@@ -39,6 +39,34 @@ const SONIX_TIMEOUT_MS = Number.parseInt(
 const DEEPGRAM_API_BASE_URL = (
   process.env.DEEPGRAM_API_BASE_URL || "https://api.deepgram.com/v1"
 ).replace(/\/$/, "");
+const DEEPGRAM_TIMEOUT_MS = Number.parseInt(
+  process.env.DEEPGRAM_TIMEOUT_MS || `${30 * 60 * 1000}`,
+  10,
+);
+const DEEPGRAM_MAX_RETRIES = Number.parseInt(
+  process.env.DEEPGRAM_MAX_RETRIES || "1",
+  10,
+);
+const DEEPGRAM_RETRY_DELAY_MS = Number.parseInt(
+  process.env.DEEPGRAM_RETRY_DELAY_MS || "1500",
+  10,
+);
+const VBEE_API_BASE_URL = (
+  process.env.VBEE_API_BASE_URL || "https://uat-api.vbeelabs.ai"
+).replace(/\/$/, "");
+const VBEE_TRANSCRIBE_PATH =
+  process.env.VBEE_TRANSCRIBE_PATH ||
+  "/api/v1/audio/transcriptions";
+const VBEE_RESULT_PATH_TEMPLATE =
+  process.env.VBEE_RESULT_PATH_TEMPLATE || "/v1/transcribe/{id}";
+const VBEE_POLL_INTERVAL_MS = Number.parseInt(
+  process.env.VBEE_POLL_INTERVAL_MS || "5000",
+  10,
+);
+const VBEE_TIMEOUT_MS = Number.parseInt(
+  process.env.VBEE_TIMEOUT_MS || `${30 * 60 * 1000}`,
+  10,
+);
 const PROVIDER_REQUEST_TIMEOUT_MS = Math.max(
   30_000,
   Number.parseInt(process.env.PROVIDER_REQUEST_TIMEOUT_MS || `${30 * 60 * 1000}`, 10),
@@ -47,11 +75,13 @@ const PROVIDER_ENV_KEYS = {
   assemblyai: "ASSEMBLYAI_API_KEY",
   sonix: "SONIX_API_KEY",
   deepgram: "DEEPGRAM_API_KEY",
+  vbee: "VBEE_API_KEY",
 };
 const PROVIDER_DEFAULT_ENDPOINTS = {
   assemblyai: "https://api.assemblyai.com/v2",
   sonix: SONIX_API_BASE_URL,
   deepgram: DEEPGRAM_API_BASE_URL,
+  vbee: VBEE_API_BASE_URL,
 };
 
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -381,6 +411,9 @@ function normalizeProviderCode(value) {
 }
 
 function getEnvApiKey(provider) {
+  if (provider === "vbee") {
+    return String(process.env.VBEE_API_KEY || process.env.AIMP_API_KEY || "").trim();
+  }
   const envKey = PROVIDER_ENV_KEYS[provider];
   return envKey ? String(process.env[envKey] || "").trim() : "";
 }
@@ -429,6 +462,8 @@ async function getTranscriptionProviderConfig() {
     configured ||
     (process.env.SONIX_API_KEY
       ? "sonix"
+      : process.env.VBEE_API_KEY || process.env.AIMP_API_KEY
+        ? "vbee"
       : process.env.DEEPGRAM_API_KEY
         ? "deepgram"
         : "assemblyai");
@@ -446,10 +481,10 @@ async function getTranscriptionProvider() {
 }
 
 function assertSupportedProvider(provider) {
-  if (!["assemblyai", "sonix", "deepgram"].includes(provider)) {
+  if (!["assemblyai", "sonix", "deepgram", "vbee"].includes(provider)) {
     throw createHttpError(
       503,
-      `Nhà cung cấp STT không hợp lệ: ${provider}. Hỗ trợ: assemblyai, sonix hoặc deepgram.`,
+      `Nhà cung cấp STT không hợp lệ: ${provider}. Hỗ trợ: assemblyai, sonix, deepgram hoặc vbee.`,
     );
   }
 }
@@ -474,6 +509,22 @@ function getAssemblyClient(providerConfig) {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function createAbortController(timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return { controller, timer };
+}
+
+function isRetryableProviderError(error) {
+  const statusCode = Number(error?.statusCode || error?.status || 0);
+  return (
+    error?.name === "AbortError" ||
+    statusCode === 408 ||
+    statusCode === 429 ||
+    (statusCode >= 500 && statusCode <= 599)
+  );
 }
 
 async function readResponseBody(response) {
@@ -882,6 +933,280 @@ async function transcribeWithSonix({
   };
 }
 
+function normalizeVbeeLanguage(language) {
+  const selected = normalizeLanguageCode(language || process.env.VBEE_LANGUAGE, "vi");
+  return selected === "auto" || selected === "multi" ? "vi" : selected;
+}
+
+function getVbeeAuthHeaders(providerConfig) {
+  const apiKey = requireProviderApiKey("vbee", providerConfig.apiKey);
+  const headerName = process.env.VBEE_AUTH_HEADER || "Authorization";
+  const scheme = String(process.env.VBEE_AUTH_SCHEME || "Bearer").trim();
+  return {
+    [headerName]: scheme ? `${scheme} ${apiKey}` : apiKey,
+  };
+}
+
+async function vbeeRequest(providerConfig, pathname, options = {}) {
+  if (
+    typeof fetch !== "function" ||
+    typeof FormData !== "function" ||
+    typeof Blob !== "function"
+  ) {
+    throw createHttpError(
+      503,
+      "Vbee provider cần Node.js 18+ để dùng fetch/FormData.",
+    );
+  }
+
+  const response = await fetch(resolveProviderUrl(providerConfig, pathname), {
+    ...options,
+    signal: options.signal || AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
+    headers: {
+      ...getVbeeAuthHeaders(providerConfig),
+      ...(options.headers || {}),
+    },
+  });
+  return readResponseBody(response);
+}
+
+function resolveProviderUrl(providerConfig, pathname) {
+  const endpoint = String(providerConfig.endpoint || "").replace(/\/$/, "");
+  const path = String(pathname || "");
+  if (/^https?:\/\//i.test(path)) return path;
+  if (
+    providerConfig.provider === "vbee" &&
+    path === VBEE_TRANSCRIBE_PATH &&
+    endpoint.endsWith(VBEE_TRANSCRIBE_PATH)
+  ) {
+    return endpoint;
+  }
+  if (providerConfig.provider === "vbee" && endpoint.endsWith(VBEE_TRANSCRIBE_PATH)) {
+    return `${endpoint.slice(0, -VBEE_TRANSCRIBE_PATH.length)}${path}`;
+  }
+  return `${endpoint}${path}`;
+}
+
+function getNestedValue(source, pathSpec) {
+  if (!source || !pathSpec) return undefined;
+  return String(pathSpec)
+    .split(".")
+    .reduce((current, key) => current?.[key], source);
+}
+
+function firstValue(...values) {
+  return values.find(
+    (value) => value !== undefined && value !== null && String(value).trim() !== "",
+  );
+}
+
+function extractVbeeText(body) {
+  return String(
+    firstValue(
+      getNestedValue(body, process.env.VBEE_TEXT_PATH),
+      body?.text,
+      body?.transcript,
+      body?.transcription,
+      body?.result?.text,
+      body?.result?.transcript,
+      body?.data?.text,
+      body?.data?.transcript,
+      body?.data?.transcription,
+    ) || "",
+  );
+}
+
+function extractVbeeId(body) {
+  return String(
+    firstValue(
+      getNestedValue(body, process.env.VBEE_ID_PATH),
+      body?.id,
+      body?.transcription_id,
+      body?.transcriptionId,
+      body?.job_id,
+      body?.jobId,
+      body?.request_id,
+      body?.requestId,
+      body?.data?.id,
+      body?.data?.transcription_id,
+      body?.data?.job_id,
+      body?.result?.id,
+    ) || "",
+  );
+}
+
+function extractVbeeStatus(body) {
+  return String(
+    firstValue(
+      getNestedValue(body, process.env.VBEE_STATUS_PATH),
+      body?.status,
+      body?.state,
+      body?.data?.status,
+      body?.data?.state,
+      body?.result?.status,
+    ) || "",
+  ).toLowerCase();
+}
+
+function extractVbeeDuration(body) {
+  const duration = Number(
+    firstValue(
+      getNestedValue(body, process.env.VBEE_DURATION_PATH),
+      body?.duration,
+      body?.audio_duration,
+      body?.data?.duration,
+      body?.result?.duration,
+    ),
+  );
+  return Number.isFinite(duration) && duration > 0 ? duration : null;
+}
+
+function extractVbeeWords(body) {
+  const words = firstValue(
+    getNestedValue(body, process.env.VBEE_WORDS_PATH),
+    body?.words,
+    body?.data?.words,
+    body?.result?.words,
+  );
+  return Array.isArray(words) ? words : [];
+}
+
+function isVbeeCompleted(body) {
+  if (extractVbeeText(body)) return true;
+  return ["completed", "complete", "done", "success", "succeeded", "finished"].includes(
+    extractVbeeStatus(body),
+  );
+}
+
+function isVbeeFailed(body) {
+  return ["failed", "failure", "error", "errored", "cancelled", "canceled"].includes(
+    extractVbeeStatus(body),
+  );
+}
+
+function buildVbeeResultPath(transcriptionId) {
+  return VBEE_RESULT_PATH_TEMPLATE.replace(
+    "{id}",
+    encodeURIComponent(transcriptionId),
+  );
+}
+
+async function submitVbeeTranscription({
+  providerConfig,
+  file,
+  filename,
+  language,
+  speakerLabels,
+  dictionaryKeywords = [],
+}) {
+  const form = new FormData();
+  const fileField = process.env.VBEE_FILE_FIELD || "file";
+  form.append(
+    fileField,
+    new Blob([file.buffer], {
+      type: file.mimetype || "application/octet-stream",
+    }),
+    filename,
+  );
+  form.append(process.env.VBEE_MODEL_FIELD || "model", process.env.VBEE_MODEL || "vbee-stt");
+  form.append(
+    process.env.VBEE_RESPONSE_FORMAT_FIELD || "response_format",
+    process.env.VBEE_RESPONSE_FORMAT || "json",
+  );
+  if (process.env.VBEE_LANGUAGE_FIELD) {
+    form.append(process.env.VBEE_LANGUAGE_FIELD, normalizeVbeeLanguage(language));
+  }
+  if (process.env.VBEE_FILENAME_FIELD) {
+    form.append(process.env.VBEE_FILENAME_FIELD, filename);
+  }
+  if (process.env.VBEE_SPEAKER_LABELS_FIELD) {
+    form.append(process.env.VBEE_SPEAKER_LABELS_FIELD, speakerLabels ? "true" : "false");
+  }
+
+  const keywords = [
+    ...dictionaryKeywords.map((keyword) => String(keyword || "").trim()),
+    ...(process.env.VBEE_KEYWORDS || "")
+      .split(",")
+      .map((keyword) => keyword.trim()),
+  ].filter(Boolean);
+  if (keywords.length > 0) {
+    form.append(process.env.VBEE_KEYWORDS_FIELD || "keywords", keywords.join(","));
+  }
+
+  return vbeeRequest(providerConfig, VBEE_TRANSCRIBE_PATH, {
+    method: "POST",
+    body: form,
+  });
+}
+
+async function waitForVbeeCompletion(providerConfig, transcriptionId) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < VBEE_TIMEOUT_MS) {
+    const body = await vbeeRequest(
+      providerConfig,
+      buildVbeeResultPath(transcriptionId),
+      { method: "GET" },
+    );
+    if (isVbeeCompleted(body)) return body;
+    if (isVbeeFailed(body)) {
+      throw createHttpError(
+        500,
+        `Vbee STT xử lý thất bại với trạng thái: ${extractVbeeStatus(body)}`,
+      );
+    }
+    await delay(VBEE_POLL_INTERVAL_MS);
+  }
+
+  throw createHttpError(
+    504,
+    "Vbee STT xử lý quá lâu. Vui lòng thử lại sau hoặc tăng VBEE_TIMEOUT_MS.",
+  );
+}
+
+async function transcribeWithVbee({
+  file,
+  speakerLabels,
+  filename,
+  language,
+  dictionaryKeywords = [],
+  providerConfig,
+}) {
+  const submitted = await submitVbeeTranscription({
+    providerConfig,
+    file,
+    filename,
+    language,
+    speakerLabels,
+    dictionaryKeywords,
+  });
+  const transcriptionId = extractVbeeId(submitted);
+  if (!isVbeeCompleted(submitted) && !transcriptionId) {
+    throw createHttpError(
+      500,
+      "Vbee STT chưa trả về transcript hoặc id job. Hãy kiểm tra VBEE_ID_PATH/VBEE_TEXT_PATH trong backend/.env theo tài liệu API.",
+    );
+  }
+  const result = isVbeeCompleted(submitted)
+    ? submitted
+    : await waitForVbeeCompletion(providerConfig, transcriptionId);
+
+  if (!transcriptionId && !extractVbeeText(result)) {
+    throw createHttpError(
+      500,
+      "Vbee STT chưa trả về transcript hoặc id job. Hãy kiểm tra VBEE_*_PATH trong backend/.env theo tài liệu API.",
+    );
+  }
+
+  return {
+    provider: "vbee",
+    providerId: transcriptionId || null,
+    duration: extractVbeeDuration(result),
+    detectedLanguage: normalizeVbeeLanguage(language),
+    text: extractVbeeText(result),
+    words: extractVbeeWords(result),
+  };
+}
+
 async function transcribeWithAssemblyAI({
   file,
   speakerLabels,
@@ -1018,6 +1343,23 @@ async function transcribeAudio({
       language,
       dictionaryKeywords,
       transcriptionSettings,
+      providerConfig,
+    });
+    return {
+      ...result,
+      audioMode: normalizedAudioMode,
+      preprocessingApplied: preprocessing.applied,
+      preprocessingMethod: preprocessing.method,
+      preprocessingWarning: preprocessing.warning,
+    };
+  }
+  if (provider === "vbee") {
+    const result = await transcribeWithVbee({
+      file: providerFile,
+      speakerLabels,
+      filename: providerFile.originalname || filename,
+      language,
+      dictionaryKeywords,
       providerConfig,
     });
     return {

@@ -27,6 +27,7 @@ copy .env.example .env
 # Mở .env và điền các thông tin:
 # - DB_PASSWORD, JWT_SECRET
 # - SONIX_API_KEY nếu dùng Sonix.ai
+# - hoặc VBEE_API_KEY nếu dùng Vbee STT
 # - hoặc DEEPGRAM_API_KEY nếu dùng Deepgram
 # - hoặc ASSEMBLYAI_API_KEY nếu dùng AssemblyAI
 
@@ -61,6 +62,21 @@ DEEPGRAM_UTTERANCES=true
 ```
 
 Deepgram API dùng header `Authorization: Token <apiKey>` và nhận file trực tiếp tại `POST https://api.deepgram.com/v1/listen`. Khi bật "nhận diện nhiều người nói" trên app, backend sẽ gửi thêm `diarize=true` hoặc `DEEPGRAM_DIARIZE_MODEL` nếu bạn cấu hình model riêng.
+
+Nếu muốn dùng Vbee STT:
+
+```env
+TRANSCRIPTION_PROVIDER=vbee
+VBEE_API_KEY=your_vbee_stt_api_key_here
+VBEE_API_BASE_URL=https://uat-api.vbeelabs.ai
+VBEE_TRANSCRIBE_PATH=/api/v1/audio/transcriptions
+VBEE_MODEL=vbee-stt
+VBEE_RESPONSE_FORMAT=json
+VBEE_RESULT_PATH_TEMPLATE=/v1/transcribe/{id}
+VBEE_LANGUAGE=vi
+```
+
+Vbee STT adapter gửi file dạng `multipart/form-data`, mặc định giống cURL của Vbee: field `file`, `model=vbee-stt`, `response_format=json`, header `Authorization: Bearer <apiKey>`. Endpoint submit hiện tại là `https://uat-api.vbeelabs.ai/api/v1/audio/transcriptions`. Bạn có thể cấu hình bằng base/path như trên, hoặc nhập full URL này vào Admin CMS > Nhà cung cấp API. Nếu response path khác mặc định, cấu hình thêm `VBEE_ID_PATH`, `VBEE_STATUS_PATH`, `VBEE_TEXT_PATH`, `VBEE_WORDS_PATH`.
 
 ### Tách vocal cho bài hát
 
@@ -172,12 +188,19 @@ Trang chủ → Bấm nút → Chuyển đến /login
 | GOOGLE_CLIENT_ID | Google OAuth Client ID | ... |
 | GOOGLE_CLIENT_SECRET | Google OAuth Client Secret | ... |
 | GOOGLE_CALLBACK_URL | Google OAuth callback URL | http://localhost:3001/api/auth/google/callback |
-| TRANSCRIPTION_PROVIDER | Provider speech-to-text | sonix, deepgram hoặc assemblyai |
+| TRANSCRIPTION_PROVIDER | Provider speech-to-text | vbee, sonix, deepgram hoặc assemblyai |
 | SONIX_API_KEY | API key Sonix.ai | your_sonix_api_key |
 | SONIX_LANGUAGE | Mã ngôn ngữ Sonix | vi |
 | DEEPGRAM_API_KEY | API key Deepgram | your_deepgram_api_key |
 | DEEPGRAM_MODEL | Model Deepgram | nova-3 |
 | DEEPGRAM_LANGUAGE | Mã ngôn ngữ Deepgram | vi |
+| VBEE_API_KEY | API key Vbee STT | your_vbee_stt_api_key |
+| VBEE_API_BASE_URL | Endpoint gốc Vbee STT | https://uat-api.vbeelabs.ai |
+| VBEE_TRANSCRIBE_PATH | Path submit file STT Vbee | /api/v1/audio/transcriptions |
+| VBEE_MODEL | Model STT gửi lên Vbee | vbee-stt |
+| VBEE_RESPONSE_FORMAT | Định dạng response Vbee | json |
+| VBEE_RESULT_PATH_TEMPLATE | Path poll kết quả, dùng `{id}` cho job id | /v1/transcribe/{id} |
+| VBEE_TEXT_PATH | Dot path tới transcript nếu response Vbee không dùng `text`/`transcript` mặc định | data.text |
 | YOUTUBE_IMPORT_ENABLED | Bật nhập một video YouTube từ URL | true |
 | YOUTUBE_COOKIES_FILE | Đường dẫn tuyệt đối đến cookies.txt của tài khoản dịch vụ khi YouTube yêu cầu xác minh | C:\\secrets\\youtube-cookies.txt |
 | DEEPGRAM_DETECT_LANGUAGE | Tự phát hiện ngôn ngữ thay vì dùng DEEPGRAM_LANGUAGE | false |

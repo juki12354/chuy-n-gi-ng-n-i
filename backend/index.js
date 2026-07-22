@@ -51,7 +51,7 @@ app.use(
     },
     credentials: true,
     allowedHeaders: ["Authorization", "Content-Type", "X-API-Key", "X-Request-Id"],
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   }),
 );
 

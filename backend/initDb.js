@@ -332,6 +332,40 @@ async function initDatabase() {
   await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE;`);
   await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();`);
   await pool.query(`ALTER TABLE transcription_jobs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();`);
+  await pool.query(`
+    DO $$
+    DECLARE
+      id_type text;
+      has_legacy_uuid boolean;
+    BEGIN
+      SELECT data_type INTO id_type
+      FROM information_schema.columns
+      WHERE table_name = 'transcription_jobs'
+        AND column_name = 'id';
+
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'transcription_jobs'
+          AND column_name = 'legacy_uuid'
+      ) INTO has_legacy_uuid;
+
+      IF id_type = 'uuid' THEN
+        ALTER TABLE transcription_jobs DROP CONSTRAINT IF EXISTS transcription_jobs_pkey;
+        IF NOT has_legacy_uuid THEN
+          ALTER TABLE transcription_jobs RENAME COLUMN id TO legacy_uuid;
+        ELSE
+          ALTER TABLE transcription_jobs DROP COLUMN id;
+        END IF;
+        ALTER TABLE transcription_jobs ADD COLUMN id BIGSERIAL PRIMARY KEY;
+      END IF;
+    END
+    $$;
+  `);
+  await pool.query(`ALTER TABLE transcription_jobs ALTER COLUMN assemblyai_id DROP NOT NULL;`);
+  await pool.query(`ALTER TABLE transcription_jobs ALTER COLUMN filename DROP NOT NULL;`);
+  await pool.query(`ALTER TABLE transcription_jobs ALTER COLUMN file_size DROP NOT NULL;`);
+  await pool.query(`ALTER TABLE transcription_jobs ALTER COLUMN audio_filename DROP NOT NULL;`);
+  await pool.query(`ALTER TABLE transcription_jobs ALTER COLUMN legacy_uuid DROP NOT NULL;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcription_jobs_ready ON transcription_jobs(status, available_at, created_at);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcription_jobs_user_status ON transcription_jobs(user_id, status);`);
   await pool.query(`
@@ -882,7 +916,8 @@ async function initDatabase() {
      VALUES
        ('deepgram', 'Deepgram', NULLIF($1, ''), $2, TRUE, $3, 'auto', 'unknown', 0.0043),
        ('sonix', 'Sonix.ai', NULLIF($4, ''), $5, TRUE, $6, 'manual', 'unknown', 0.0167),
-       ('assemblyai', 'AssemblyAI', NULLIF($7, ''), $8, TRUE, $9, 'rule_based', 'unknown', 0.0060)
+       ('assemblyai', 'AssemblyAI', NULLIF($7, ''), $8, TRUE, $9, 'rule_based', 'unknown', 0.0060),
+       ('vbee', 'Vbee STT', NULLIF($10, ''), $11, TRUE, $12, 'manual', 'unknown', 0)
      ON CONFLICT (code) DO UPDATE
        SET api_key_encrypted = COALESCE(stt_providers.api_key_encrypted, EXCLUDED.api_key_encrypted),
            endpoint = COALESCE(NULLIF(stt_providers.endpoint, ''), EXCLUDED.endpoint),
@@ -897,6 +932,9 @@ async function initDatabase() {
       encryptProviderSecret(process.env.ASSEMBLYAI_API_KEY),
       "https://api.assemblyai.com/v2",
       process.env.TRANSCRIPTION_PROVIDER === "assemblyai",
+      encryptProviderSecret(process.env.VBEE_API_KEY || process.env.AIMP_API_KEY),
+      process.env.VBEE_API_BASE_URL || "https://uat-api.vbeelabs.ai",
+      process.env.TRANSCRIPTION_PROVIDER === "vbee",
     ],
   );
 
