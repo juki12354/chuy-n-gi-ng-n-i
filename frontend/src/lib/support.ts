@@ -34,7 +34,7 @@ async function readJson<T>(res: Response): Promise<T> {
   return data;
 }
 
-function authHeaders(token?: string | null) {
+function authHeaders(token?: string | null): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

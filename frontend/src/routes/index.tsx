@@ -91,7 +91,7 @@ const homeNavigation = [
       },
       {
         title: "Yêu cầu hỗ trợ",
-        desc: "Gửi yêu cầu kỹ thuật và theo dõi ticket.",
+        desc: "Gửi yêu cầu kỹ thuật và theo dõi trạng thái xử lý.",
         href: "/support",
         icon: Headphones,
       },
@@ -102,7 +102,7 @@ const homeNavigation = [
     items: [
       {
         title: "Hướng dẫn sử dụng",
-        desc: "Cách upload, ghi âm và nói realtime.",
+        desc: "Cách tải tệp lên, ghi âm và nói realtime.",
         href: "#features",
         icon: FileText,
       },
@@ -131,7 +131,7 @@ const homeNavigation = [
       },
       {
         title: "Đối tác API",
-        desc: "Kết nối Speech-to-Text vào sản phẩm riêng.",
+        desc: "Kết nối chuyển giọng nói thành văn bản vào sản phẩm riêng.",
         href: "/api",
         icon: PlugZap,
       },
@@ -148,7 +148,7 @@ const homeNavigation = [
 const metrics = [
   { value: "50h", label: "Gói dùng thử có quản lý quota" },
   { value: "200MB", label: "Giới hạn file tải lên" },
-  { value: "3 cách", label: "Upload, ghi âm, realtime" },
+  { value: "3 cách", label: "Tải tệp, ghi âm, realtime" },
   { value: "4 định dạng", label: "TXT, DOCX, SRT, copy" },
 ];
 
@@ -435,7 +435,7 @@ function Hero({ onStart }: { onStart: () => void }) {
 
       <div className="relative mx-auto max-w-7xl text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-wide text-[#ffdc45]">
-          <Sparkles className="h-4 w-4 text-[#ffcb05]" /> Vbee Speech to Text
+          <Sparkles className="h-4 w-4 text-[#ffcb05]" /> Vbee chuyển giọng nói thành văn bản
         </div>
         <h1 className="mx-auto mt-5 max-w-4xl text-2xl font-black leading-tight tracking-tight text-white md:text-3xl lg:text-4xl">
           Chuyển giọng nói thành văn bản, gọn và chính xác
@@ -498,6 +498,9 @@ function Hero({ onStart }: { onStart: () => void }) {
             <div className="p-4 md:p-5">
               <div className="space-y-3">
                 {[
+                  ["00:04", "Hôm nay chúng ta tổng hợp tính năng chuyển giọng nói thành văn bản của Vbee."],
+                  ["00:21", "Người dùng có thể tải file, ghi âm hoặc nói realtime."],
+                  ["01:08", "Sau khi xử lý, transcript được lưu vào lịch sử để xuất file."],
                   [
                     "00:04",
                     "Hôm nay chúng ta tổng hợp tính năng Vbee Speech to Text.",
@@ -655,7 +658,7 @@ function WorkspacePreview({ onStart }: { onStart: () => void }) {
               {[
                 ["Ngôn ngữ", "Tiếng Việt"],
                 ["Thời gian", "~4 phút"],
-                ["Export", "DOCX/SRT"],
+                ["Xuất file", "DOCX/SRT"],
               ].map(([label, value]) => (
                 <div
                   key={label}
@@ -861,11 +864,14 @@ function Footer() {
             className="h-14 w-auto rounded-xl bg-white p-2"
           />
           <p className="mt-4 max-w-sm text-sm font-semibold leading-7 text-white/65">
-            Vbee AI Speech Workspace tập trung vào speech-to-text, realtime,
+            Vbee AI Speech Workspace tập trung vào chuyển giọng nói thành văn bản, realtime,
             transcript, quota và gói cước trong một giao diện thống nhất.
           </p>
         </div>
         {[
+          ["Sản phẩm", ["Tải tệp lên", "Ghi âm", "Realtime", "Lịch sử"]],
+          ["Hệ thống", ["API", "Quota", "Thanh toán", "Hỗ trợ"]],
+          ["Liên hệ", ["contact@vbee.ai", "(+84) 249 999 3399", "Hà Nội, Việt Nam"]],
           ["Sản phẩm", ["Upload", "Ghi âm", "Realtime", "History"]],
           ["Hệ thống", ["API", "Quota", "Billing", "Support"]],
           [

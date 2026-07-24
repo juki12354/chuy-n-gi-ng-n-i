@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("../config/env");
 const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
@@ -136,7 +136,7 @@ router.post("/url", requireAuth, urlImportLimiter, async (req, res) => {
   let importedFile = null;
   try {
     assertMediaRightsAccepted(req);
-    assertTranscriptionProviderReady();
+    await assertTranscriptionProviderReady();
 
     const metadata = await getYoutubeMetadata(req.body?.url);
     const quotaBeforeDownload = await validateYoutubeMetadataForUser(
@@ -321,7 +321,7 @@ router.post(
         return res.status(400).json({ error: "Vui lòng chọn file âm thanh" });
       }
       req.file.originalname = normalizeFilename(req.file.originalname);
-      assertTranscriptionProviderReady();
+      await assertTranscriptionProviderReady();
       const source =
         req.body.source === "recording" ||
         req.file?.originalname?.startsWith("recording.")

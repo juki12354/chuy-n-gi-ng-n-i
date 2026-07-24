@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("./config/env");
 process.env.PROCESS_ROLE = process.env.PROCESS_ROLE || "api";
 const express = require("express");
 const cors = require("cors");
@@ -24,8 +24,8 @@ const quotaRoutes = require("./routes/quota");
 const billingRoutes = require("./routes/billing");
 const settingsRoutes = require("./routes/settings");
 const supportRoutes = require("./routes/support");
-const referralRoutes = require("./routes/referrals");
 const adminRoutes = require("./routes/admin");
+const referralRoutes = require("./routes/referrals");
 const initDatabase = require("./initDb");
 const { getTranscriptionProvider } = require("./services/transcriptionService");
 const { startTranscriptionWorker } = require("./services/transcriptionQueue");
@@ -55,7 +55,7 @@ app.use(
     },
     credentials: true,
     allowedHeaders: ["Authorization", "Content-Type", "X-API-Key", "X-Request-Id"],
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   }),
 );
 
@@ -70,8 +70,8 @@ app.use("/api/quota", quotaRoutes);
 app.use("/api/billing", billingRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/support", supportRoutes);
-app.use("/api/referrals", referralRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/referrals", referralRoutes);
 app.use("/api/v1", publicApiRoutes);
 
 app.get("/", (_req, res) => {
@@ -84,11 +84,13 @@ app.get("/", (_req, res) => {
   });
 });
 
-app.get("/api/health", (_req, res) => {
+app.get("/api/health", async (_req, res) => {
   res.json({
     status: "ok",
     message: "Backend đang chạy",
-    ...(IS_PRODUCTION ? {} : { transcriptionProvider: getTranscriptionProvider() }),
+    ...(IS_PRODUCTION
+      ? {}
+      : { transcriptionProvider: await getTranscriptionProvider() }),
   });
 });
 
@@ -125,6 +127,15 @@ initDatabase()
     server.requestTimeout = 15 * 60 * 1000;
     server.headersTimeout = 15 * 1000;
     server.keepAliveTimeout = 5 * 1000;
+    server.on("error", (error) => {
+      if (error.code === "EADDRINUSE") {
+        console.error(
+          `Port ${PORT} đang được sử dụng. Hãy dừng server cũ hoặc đổi PORT trong backend/.env.`,
+        );
+        process.exit(1);
+      }
+      throw error;
+    });
   })
   .catch((error) => {
     console.error("Không thể khởi tạo database:", error.message);

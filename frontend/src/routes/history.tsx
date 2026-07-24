@@ -664,9 +664,9 @@ function HistoryPage() {
 
         <div className="mb-6 grid gap-3 md:grid-cols-4">
           {[
-            ["Tổng số file", String(totalItems)],
+            ["Tổng số tệp", String(totalItems)],
             ["Đã chuyển đổi", String(completedCount)],
-            ["Recordings", String(recordingCount)],
+            ["Bản ghi âm", String(recordingCount)],
             ["Thời lượng", formatDuration(totalDuration)],
           ].map(([label, value]) => (
             <div

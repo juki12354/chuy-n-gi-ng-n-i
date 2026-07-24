@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("../config/env");
 
 const TRANSLATION_BASE_URL = (
   process.env.LIBRETRANSLATE_API_URL || "https://libretranslate.com"

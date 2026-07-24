@@ -340,7 +340,7 @@ function RecordPage() {
         if (permission.state === "granted") {
           setMicStatus("ready");
           setMicStatusMessage(
-            "Microphone access is already allowed - you're ready to record.",
+            "Quyền microphone đã được cấp. Bạn có thể bắt đầu ghi âm.",
           );
           await loadMicrophoneLabel();
           return;
@@ -349,12 +349,12 @@ function RecordPage() {
 
       setMicStatus("prompt");
       setMicStatusMessage(
-        "Nhấn Start Recording để cấp quyền microphone và bắt đầu ghi âm.",
+        "Nhấn Bắt đầu ghi âm để cấp quyền microphone và bắt đầu ghi âm.",
       );
     } catch {
       setMicStatus("prompt");
       setMicStatusMessage(
-        "Nhấn Start Recording để cấp quyền microphone và bắt đầu ghi âm.",
+        "Nhấn Bắt đầu ghi âm để cấp quyền microphone và bắt đầu ghi âm.",
       );
     }
   }
@@ -507,7 +507,7 @@ function RecordPage() {
       setMicStatus("ready");
       setMicDeviceLabel(track?.label || "Microphone mặc định");
       setMicStatusMessage(
-        "Microphone access is allowed - you're ready to record.",
+        "Quyền microphone đã được cấp. Bạn có thể bắt đầu ghi âm.",
       );
 
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -646,13 +646,14 @@ function RecordPage() {
   async function handleDownload() {
     const text = editRef.current?.textContent ?? transcription;
     const translated = translation?.text?.trim();
+    const translationTargetLanguage = translation?.targetLanguage ?? "auto";
     const lines = translated
       ? [
           "Transcript gốc",
           "",
           text,
           "",
-          `Bản dịch (${languageLabel(translation.targetLanguage)})`,
+          `Bản dịch (${languageLabel(translationTargetLanguage)})`,
           "",
           translated,
         ]
@@ -681,13 +682,14 @@ function RecordPage() {
   function handleDownloadTxt() {
     const text = editRef.current?.textContent ?? transcription;
     const translated = translation?.text?.trim();
+    const translationTargetLanguage = translation?.targetLanguage ?? "auto";
     const content = translated
       ? [
           "Transcript gốc",
           "",
           text,
           "",
-          `Bản dịch (${languageLabel(translation.targetLanguage)})`,
+          `Bản dịch (${languageLabel(translationTargetLanguage)})`,
           "",
           translated,
         ].join("\n")
@@ -809,6 +811,36 @@ function RecordPage() {
               {recordingNotice}
             </p>
           )}
+
+          <div className="mt-8 flex flex-col items-center gap-4 text-center">
+            {status === "idle" && (
+              <>
+                <div className="flex items-center justify-center">
+                  <button
+                    onClick={() => void startRecording()}
+                    disabled={
+                      quota?.isLimitReached ||
+                      micStatus === "blocked" ||
+                      micStatus === "unsupported"
+                    }
+                    className="inline-flex items-center gap-3 rounded-full bg-primary px-6 py-3 text-base font-black text-primary-foreground shadow-glow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Mic className="h-6 w-6" />
+                    {quota?.isLimitReached
+                      ? "Nâng cấp để ghi âm"
+                      : micStatus === "blocked"
+                        ? "Microphone bị chặn"
+                        : "Bắt đầu ghi âm"}
+                  </button>
+                </div>
+                <p className="max-w-xl text-base leading-7 text-muted-foreground">
+                  {quota?.isLimitReached
+                    ? "Free đã hết thời lượng. Nâng cấp Premium để ghi âm tiếp."
+                    : "Microphone đã sẵn sàng. Bạn có thể bắt đầu ghi âm."}
+                </p>
+              </>
+            )}
+          </div>
 
           <div className="mt-0 flex flex-col items-center gap-2 text-center">
             {status === "requesting" && (
@@ -1071,8 +1103,10 @@ function RecorderReadinessPanel({
     ? Math.min(quota.remainingSeconds, quota.limits.maxRecordSeconds)
     : null;
   const nearLimit =
-    Boolean(quota && isLive && remainingAfterRecord !== null) &&
-    remainingAfterRecord <= Math.max(30, quota!.alertSeconds);
+    quota !== null &&
+    isLive &&
+    remainingAfterRecord !== null &&
+    remainingAfterRecord <= Math.max(30, quota.alertSeconds);
   const statusColor =
     micStatus === "ready"
       ? "text-primary"
@@ -1803,7 +1837,7 @@ function HelpBottomNav({
 function VbeeStyleFooter() {
   return (
     <footer className="mt-10 border-t border-border bg-white px-4 py-6 text-center text-sm text-muted-foreground">
-      <p>© 2026 Vbee Voice. All rights reserved.</p>
+      <p>© 2026 Vbee Voice. Đã đăng ký bản quyền.</p>
       <div className="mt-3 flex flex-wrap justify-center gap-x-6 gap-y-2 font-semibold text-primary">
         <Link to="/">Vbee</Link>
         <Link to="/pricing">Bảng giá</Link>

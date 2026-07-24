@@ -540,13 +540,14 @@ function UploadPage() {
   async function handleDownload() {
     const text = editRef.current?.textContent ?? transcription;
     const translated = translation?.text?.trim();
+    const translationTargetLanguage = translation?.targetLanguage ?? "auto";
     const lines = translated
       ? [
           "Transcript gốc",
           "",
           text,
           "",
-          `Bản dịch (${languageLabel(translation.targetLanguage)})`,
+          `Bản dịch (${languageLabel(translationTargetLanguage)})`,
           "",
           translated,
         ]
@@ -576,13 +577,14 @@ function UploadPage() {
   function handleDownloadTxt() {
     const text = editRef.current?.textContent ?? transcription;
     const translated = translation?.text?.trim();
+    const translationTargetLanguage = translation?.targetLanguage ?? "auto";
     const content = translated
       ? [
           "Transcript gốc",
           "",
           text,
           "",
-          `Bản dịch (${languageLabel(translation.targetLanguage)})`,
+          `Bản dịch (${languageLabel(translationTargetLanguage)})`,
           "",
           translated,
         ].join("\n")
@@ -610,7 +612,6 @@ function UploadPage() {
     setTranscription("");
     setTranslation(null);
     setTranslationError("");
-    setAudioProcessingNote("");
     setUploadError("");
     setDuration(null);
     setExpectedDuration(null);
@@ -1907,7 +1908,7 @@ function UploadModeSelector({
 function VbeeStyleFooter() {
   return (
     <footer className="mt-8 border-t border-border bg-white px-4 py-6 text-center text-sm text-muted-foreground">
-      <p>© 2026 Vbee Voice. All rights reserved.</p>
+      <p>© 2026 Vbee Voice. Đã đăng ký bản quyền.</p>
       <div className="mt-3 flex flex-wrap justify-center gap-x-6 gap-y-2 font-semibold text-primary">
         <Link to="/">Vbee</Link>
         <Link to="/pricing">Bảng giá</Link>

@@ -466,21 +466,25 @@ function PricingPage() {
 
   useEffect(() => {
     if (!user || !token || pendingPurchaseStarted.current) return;
+    const authToken = token;
 
     const pending = getPendingPlanPurchase();
     if (!pending) return;
+    const pendingPurchase = pending;
 
     pendingPurchaseStarted.current = true;
-    setBilling(pending.billingCycle);
-    setUpgradingPlan(pending.planName);
-    setPlanMessage(`Đang đăng ký gói ${pending.planName} đã chọn trước đó...`);
+    setBilling(pendingPurchase.billingCycle);
+    setUpgradingPlan(pendingPurchase.planName);
+    setPlanMessage(
+      `Đang đăng ký gói ${pendingPurchase.planName} đã chọn trước đó...`,
+    );
 
     async function completePendingPurchase() {
       try {
         const checkout = await createCheckout(
-          token,
-          pending.plan,
-          pending.billingCycle,
+          authToken,
+          pendingPurchase.plan,
+          pendingPurchase.billingCycle,
         );
         clearPendingPlanPurchase();
         void navigate({
@@ -1430,18 +1434,21 @@ function PricingFooter() {
           />
           <p className="mt-5 max-w-sm text-sm leading-7 text-white/65">
             Vbee AIVoice — bảng giá theo tháng và theo năm cho nền tảng
-            speech-to-text.
+            chuyển giọng nói thành văn bản.
           </p>
         </div>
         {[
-          ["Sản phẩm", ["Speech to Text", "Record", "History", "Export DOCX"]],
+          [
+            "Sản phẩm",
+            ["Chuyển giọng nói thành văn bản", "Ghi âm", "Lịch sử", "Xuất DOCX"],
+          ],
           [
             "Bảng giá",
-            ["Theo lượt", "Tiêu chuẩn", "Đặc biệt", "Chuyên nghiệp"],
+            ["Miễn phí", "Tiêu chuẩn", "Đặc biệt", "Doanh nghiệp"],
           ],
           [
             "Liên hệ",
-            ["vbee@gmail.com", "0916 168 475", "Vinh University", "Việt Nam"],
+            ["vbee@gmail.com", "0916 168 475", "Đại học Vinh", "Việt Nam"],
           ],
         ].map(([title, links]) => (
           <div key={String(title)}>
@@ -1455,7 +1462,7 @@ function PricingFooter() {
         ))}
       </div>
       <div className="mx-auto mt-10 max-w-7xl border-t border-white/10 pt-6 text-sm text-white/50">
-        © 2026 Vbee AIVoice. All rights reserved.
+        © 2026 Vbee AIVoice. Đã đăng ký bản quyền.
       </div>
     </footer>
   );

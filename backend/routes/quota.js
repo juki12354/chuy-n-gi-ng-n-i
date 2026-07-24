@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("../config/env");
 const express = require("express");
 const { requireAuth } = require("../middleware/auth");
 const {

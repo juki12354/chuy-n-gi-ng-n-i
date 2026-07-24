@@ -1,0 +1,215 @@
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  Files,
+  Users,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  AdminPanel,
+  AdminPanelHeader,
+  PageState,
+  StatusBadge,
+} from "@/components/admin/admin-ui";
+import { fetchDashboardSummary } from "@/lib/admin/dashboard-service";
+import { formatDuration, formatMinutes } from "@/lib/admin/formatters";
+import { ADMIN_SUMMARY_REFRESH_MS } from "@/lib/admin/realtime";
+import type { DashboardSummary } from "@/lib/admin/types";
+
+export const Route = createFileRoute("/admin/")({
+  component: AdminDashboardPage,
+});
+
+function AdminDashboardPage() {
+  const [data, setData] = useState<DashboardSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  function load(showLoading = true) {
+    if (showLoading) setLoading(true);
+    if (showLoading) setError("");
+    void fetchDashboardSummary()
+      .then(setData)
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : "Lỗi không xác định"),
+      )
+      .finally(() => {
+        if (showLoading) setLoading(false);
+      });
+  }
+
+  useEffect(() => {
+    load();
+    const timer = window.setInterval(
+      () => load(false),
+      ADMIN_SUMMARY_REFRESH_MS,
+    );
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <PageState loading={loading} error={error} empty={!data} onRetry={load}>
+      {data && (
+        <div className="space-y-5">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <Metric
+              icon={<Users className="h-5 w-5" />}
+              label="Người dùng"
+              value={data.total_users}
+            />
+            <Metric
+              icon={<Files className="h-5 w-5" />}
+              label="Tệp đã tải lên"
+              value={data.total_files}
+            />
+            <Metric
+              icon={<CheckCircle2 className="h-5 w-5" />}
+              label="Job"
+              value={data.total_jobs}
+            />
+            <Metric
+              icon={<Clock3 className="h-5 w-5" />}
+              label="Số phút đã xử lý"
+              value={formatMinutes(data.processed_minutes)}
+            />
+          </div>
+
+          <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+            <AdminPanel>
+              <AdminPanelHeader
+                title="Usage 7 ngày"
+                description="Mức sử dụng web và API theo ngày"
+              />
+              <div className="flex h-72 items-end gap-3 p-4">
+                {data.usage.map((point) => {
+                  const total = point.web_minutes + point.api_minutes;
+                  return (
+                    <div
+                      key={point.date}
+                      className="flex flex-1 flex-col items-center gap-2"
+                    >
+                      <div className="flex h-56 w-full items-end rounded-md bg-[#fbf8ef] px-2">
+                        <div
+                          className="w-full rounded-t-md bg-[#21104a]"
+                          style={{ height: `${Math.min(100, total / 2)}%` }}
+                          title={`${total} phút`}
+                        />
+                      </div>
+                      <span className="text-xs font-bold text-[#756894]">
+                        {point.date.slice(5)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </AdminPanel>
+
+            <AdminPanel>
+              <AdminPanelHeader
+                title="Tình trạng job"
+                description="Tỷ lệ xử lý và trạng thái"
+              />
+              <div className="space-y-4 p-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <Metric
+                    label="Thành công"
+                    value={`${data.success_rate}%`}
+                    compact
+                  />
+                  <Metric
+                    label="Thất bại"
+                    value={`${data.failure_rate}%`}
+                    compact
+                    icon={<AlertTriangle className="h-4 w-4" />}
+                  />
+                </div>
+                <div className="text-sm font-bold">
+                  Thời gian xử lý TB:{" "}
+                  {formatDuration(data.average_processing_time)}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(data.jobs_by_status).map(
+                    ([status, count]) => (
+                      <div
+                        key={status}
+                        className="rounded-md border border-[#e4ddcf] p-3"
+                      >
+                        <StatusBadge
+                          status={status as keyof typeof data.jobs_by_status}
+                        />
+                        <p className="mt-2 text-xl font-black">{count}</p>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </div>
+            </AdminPanel>
+          </div>
+
+          <div className="grid gap-5 xl:grid-cols-2">
+            <JobList title="Jobs gần nhất" jobs={data.recent_jobs} />
+            <JobList title="Jobs lỗi gần nhất" jobs={data.recent_failed_jobs} />
+          </div>
+        </div>
+      )}
+    </PageState>
+  );
+}
+
+function Metric({
+  icon,
+  label,
+  value,
+  compact = false,
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-lg border border-[#e4ddcf] bg-white p-4 shadow-sm ${compact ? "" : "min-h-28"}`}
+    >
+      <div className="flex items-center justify-between text-[#756894]">
+        <span className="text-sm font-bold">{label}</span>
+        {icon}
+      </div>
+      <p className="mt-3 text-2xl font-black text-[#21104a]">{value}</p>
+    </div>
+  );
+}
+
+function JobList({
+  title,
+  jobs,
+}: {
+  title: string;
+  jobs: DashboardSummary["recent_jobs"];
+}) {
+  return (
+    <AdminPanel>
+      <AdminPanelHeader title={title} />
+      <div className="divide-y divide-[#efe7d8]">
+        {jobs.length === 0 ? (
+          <p className="p-4 text-sm text-[#756894]">Không có job.</p>
+        ) : (
+          jobs.map((job) => (
+            <div
+              key={job.job_id}
+              className="grid gap-2 p-4 md:grid-cols-[1fr_auto] md:items-center"
+            >
+              <div>
+                <p className="font-black">{job.file_name}</p>
+                <p className="text-sm text-[#756894]">{job.user_email}</p>
+              </div>
+              <StatusBadge status={job.status} />
+            </div>
+          ))
+        )}
+      </div>
+    </AdminPanel>
+  );
+}

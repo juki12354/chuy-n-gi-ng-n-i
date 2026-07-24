@@ -2,6 +2,7 @@ require("dotenv").config();
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const { AsyncLocalStorage } = require("async_hooks");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 const ffmpegStaticPath = require("ffmpeg-static");
@@ -20,6 +21,7 @@ const {
   recordProviderFailure,
   recordProviderSuccess,
 } = require("./providerCircuitBreaker");
+const { decryptProviderSecret } = require("./providerSecrets");
 
 const ALLOWED_EXT = /\.(mp3|wav|m4a|ogg|flac|aac|mp4|webm)$/i;
 const SUPPORTED_TRANSCRIPTION_PROVIDERS = [
@@ -50,8 +52,14 @@ const DEEPGRAM_API_BASE_URL = (
   process.env.DEEPGRAM_API_BASE_URL || "https://api.deepgram.com/v1"
 ).replace(/\/$/, "");
 const VBEE_STT_API_BASE_URL = (
-  process.env.VBEE_STT_API_BASE_URL || "https://api.vbee.vn/v1"
+  process.env.VBEE_STT_API_BASE_URL ||
+  process.env.VBEE_API_BASE_URL ||
+  "https://uat-api.vbeelabs.ai"
 ).replace(/\/$/, "");
+const VBEE_TRANSCRIBE_PATH =
+  process.env.VBEE_TRANSCRIBE_PATH || "/stt";
+const VBEE_RESULT_PATH_TEMPLATE =
+  process.env.VBEE_RESULT_PATH_TEMPLATE || "/stt/transcripts/{id}";
 const VBEE_STT_POLL_INTERVAL_MS = Math.max(
   2_000,
   Number.parseInt(process.env.VBEE_STT_POLL_INTERVAL_MS || "3000", 10),
@@ -85,6 +93,7 @@ const PROVIDER_RETRY_BASE_MS = Math.max(
   250,
   Number.parseInt(process.env.PROVIDER_RETRY_BASE_MS || "750", 10) || 750,
 );
+const providerConfigContext = new AsyncLocalStorage();
 
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
@@ -607,6 +616,75 @@ function hasConfiguredProviderSecret(value) {
   );
 }
 
+function normalizeProviderEndpoint(value, fallback) {
+  return String(value || fallback || "")
+    .trim()
+    .replace(/\/$/, "");
+}
+
+function getRuntimeProviderConfig(provider) {
+  const config = providerConfigContext.getStore();
+  return config?.provider === provider ? config : null;
+}
+
+function getProviderEndpoint(provider, fallback) {
+  return normalizeProviderEndpoint(
+    getRuntimeProviderConfig(provider)?.endpoint,
+    fallback,
+  );
+}
+
+function getProviderApiKey(provider, envValue) {
+  const cmsKey = getRuntimeProviderConfig(provider)?.apiKey;
+  return hasConfiguredProviderSecret(cmsKey) ? cmsKey : envValue;
+}
+
+async function getCmsTranscriptionProviderConfig() {
+  try {
+    const { rows } = await pool.query(
+      `SELECT code, endpoint, api_key_encrypted
+       FROM stt_providers
+       WHERE enabled = TRUE AND is_default = TRUE
+       ORDER BY id ASC
+       LIMIT 1`,
+    );
+    const row = rows[0];
+    if (!row) return null;
+    const provider = String(row.code || "").trim().toLowerCase();
+    assertSupportedProvider(provider);
+    return {
+      provider,
+      endpoint: normalizeProviderEndpoint(row.endpoint),
+      apiKey: decryptProviderSecret(row.api_key_encrypted),
+      source: "cms",
+    };
+  } catch (error) {
+    if (error?.code !== "42P01") {
+      console.warn(
+        "Không đọc được provider mặc định từ CMS, dùng cấu hình .env:",
+        error.message,
+      );
+    }
+    return null;
+  }
+}
+
+async function getTranscriptionRuntimePlan() {
+  const envProviders = getTranscriptionProviderChain();
+  const cmsConfig = await getCmsTranscriptionProviderConfig();
+  if (!cmsConfig) {
+    return { providers: envProviders, configs: new Map() };
+  }
+
+  const providers = isProviderFailoverEnabled()
+    ? Array.from(new Set([cmsConfig.provider, ...envProviders]))
+    : [cmsConfig.provider];
+  return {
+    providers,
+    configs: new Map([[cmsConfig.provider, cmsConfig]]),
+  };
+}
+
 function getTranscriptionProviderPreference() {
   const configured = String(process.env.TRANSCRIPTION_PROVIDER || "auto")
     .trim()
@@ -726,39 +804,56 @@ function assertSupportedProvider(provider) {
 }
 
 function getAssemblyClient() {
-  if (!hasConfiguredProviderSecret(process.env.ASSEMBLYAI_API_KEY)) {
+  const apiKey = getProviderApiKey(
+    "assemblyai",
+    process.env.ASSEMBLYAI_API_KEY,
+  );
+  if (!hasConfiguredProviderSecret(apiKey)) {
     throw createProviderConfigurationError(
       "Chưa cấu hình ASSEMBLYAI_API_KEY trong backend/.env",
     );
   }
-  return new AssemblyAI({ apiKey: process.env.ASSEMBLYAI_API_KEY });
+  return new AssemblyAI({ apiKey });
 }
 
 function getSonixApiKey() {
-  if (!hasConfiguredProviderSecret(process.env.SONIX_API_KEY)) {
+  const apiKey = getProviderApiKey("sonix", process.env.SONIX_API_KEY);
+  if (!hasConfiguredProviderSecret(apiKey)) {
     throw createProviderConfigurationError(
       "Chưa cấu hình SONIX_API_KEY trong backend/.env",
     );
   }
-  return process.env.SONIX_API_KEY;
+  return apiKey;
 }
 
 function getDeepgramApiKey() {
-  if (!hasConfiguredProviderSecret(process.env.DEEPGRAM_API_KEY)) {
+  const apiKey = getProviderApiKey("deepgram", process.env.DEEPGRAM_API_KEY);
+  if (!hasConfiguredProviderSecret(apiKey)) {
     throw createProviderConfigurationError(
       "Chưa cấu hình DEEPGRAM_API_KEY trong backend/.env",
     );
   }
-  return process.env.DEEPGRAM_API_KEY;
+  return apiKey;
 }
 
 function getVbeeAuthHeaders() {
-  const apiKey = String(process.env.VBEE_API_KEY || "").trim();
+  const apiKey = String(
+    getProviderApiKey(
+      "vbee",
+      process.env.VBEE_API_KEY || process.env.AIMP_API_KEY,
+    ) || "",
+  ).trim();
   if (hasConfiguredProviderSecret(apiKey)) {
     const header = String(
-      process.env.VBEE_API_KEY_HEADER || "X-API-Key",
+      process.env.VBEE_API_KEY_HEADER ||
+        process.env.VBEE_AUTH_HEADER ||
+        "X-API-Key",
     ).trim();
-    const scheme = String(process.env.VBEE_API_KEY_SCHEME || "").trim();
+    const scheme = String(
+      process.env.VBEE_API_KEY_SCHEME ??
+        process.env.VBEE_AUTH_SCHEME ??
+        "",
+    ).trim();
     if (!/^[A-Za-z0-9-]+$/.test(header)) {
       throw createProviderConfigurationError(
         "VBEE_API_KEY_HEADER không hợp lệ trong backend/.env",
@@ -972,13 +1067,16 @@ async function sonixRequest(pathname, options = {}) {
   const { providerStage, ...requestOptions } = options;
 
   try {
-    const response = await fetch(`${SONIX_API_BASE_URL}${pathname}`, {
+    const response = await fetch(
+      `${getProviderEndpoint("sonix", SONIX_API_BASE_URL)}${pathname}`,
+      {
       ...requestOptions,
       signal:
         requestOptions.signal ||
         AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
       headers,
-    });
+      },
+    );
 
     return await readResponseBody(response);
   } catch (error) {
@@ -1095,7 +1193,9 @@ async function transcribeWithDeepgram({
 
   let body;
   try {
-    const response = await fetch(`${DEEPGRAM_API_BASE_URL}/listen?${params}`, {
+    const response = await fetch(
+      `${getProviderEndpoint("deepgram", DEEPGRAM_API_BASE_URL)}/listen?${params}`,
+      {
       method: "POST",
       headers: {
         Authorization: `Token ${getDeepgramApiKey()}`,
@@ -1103,7 +1203,8 @@ async function transcribeWithDeepgram({
       },
       body: file.buffer,
       signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
-    });
+      },
+    );
     body = await readResponseBody(response);
   } catch (error) {
     throw annotateProviderError(error, {
@@ -1141,7 +1242,9 @@ async function vbeeSttRequest(pathname, options = {}) {
   const authHeaders = getVbeeAuthHeaders();
   const { providerStage, ...requestOptions } = options;
   try {
-    const response = await fetch(`${VBEE_STT_API_BASE_URL}${pathname}`, {
+    const response = await fetch(
+      `${getProviderEndpoint("vbee", VBEE_STT_API_BASE_URL)}${pathname}`,
+      {
       ...requestOptions,
       signal:
         requestOptions.signal ||
@@ -1150,7 +1253,8 @@ async function vbeeSttRequest(pathname, options = {}) {
         ...authHeaders,
         ...(requestOptions.headers || {}),
       },
-    });
+      },
+    );
     return await readResponseBody(response);
   } catch (error) {
     throw annotateProviderError(error, {
@@ -1164,19 +1268,58 @@ function unwrapVbeeResponse(response) {
   return response?.result || response?.data || response || {};
 }
 
+function getNestedValue(source, pathSpec) {
+  const pathParts = String(pathSpec || "")
+    .split(".")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return pathParts.reduce(
+    (value, part) =>
+      value !== null && value !== undefined ? value[part] : undefined,
+    source,
+  );
+}
+
+function firstDefined(...values) {
+  return values.find(
+    (value) => value !== undefined && value !== null && value !== "",
+  );
+}
+
 function getVbeeStatus(response) {
-  return String(unwrapVbeeResponse(response).status || "")
+  const body = unwrapVbeeResponse(response);
+  return String(
+    firstDefined(
+      getNestedValue(response, process.env.VBEE_STATUS_PATH),
+      body.status,
+      body.state,
+    ) || "",
+  )
     .trim()
     .toUpperCase();
 }
 
 function getVbeeTranscriptId(response) {
   const body = unwrapVbeeResponse(response);
-  return body.transcriptId || body.transcript_id || body.id || null;
+  return (
+    firstDefined(
+      getNestedValue(response, process.env.VBEE_ID_PATH),
+      body.transcriptId,
+      body.transcript_id,
+      body.jobId,
+      body.job_id,
+      body.id,
+    ) || null
+  );
 }
 
 function getVbeeUtterances(response) {
-  const value = unwrapVbeeResponse(response).utterances;
+  const body = unwrapVbeeResponse(response);
+  const value = firstDefined(
+    getNestedValue(response, process.env.VBEE_WORDS_PATH),
+    body.utterances,
+    body.words,
+  );
   if (Array.isArray(value)) return value;
   if (typeof value !== "string" || !value.trim()) return [];
   try {
@@ -1262,7 +1405,15 @@ function buildTextFromVbee(response, speakerLabels) {
       .join("\n\n");
   }
   return (
-    String(body.transcript || body.text || "").trim() ||
+    String(
+      firstDefined(
+        getNestedValue(response, process.env.VBEE_TEXT_PATH),
+        body.transcript,
+        body.text,
+        body.resultText,
+        body.result_text,
+      ) || "",
+    ).trim() ||
     utterances
       .map((utterance) => String(utterance.text || "").trim())
       .filter(Boolean)
@@ -1273,15 +1424,35 @@ function buildTextFromVbee(response, speakerLabels) {
 async function submitVbeeTranscript(file, filename) {
   const form = new FormData();
   form.append(
-    "audioContent",
+    process.env.VBEE_FILE_FIELD || "audioContent",
     new Blob([file.buffer], { type: "audio/wav" }),
     filename,
   );
-  form.append("mode", "async");
+  if (process.env.VBEE_MODEL) {
+    form.append(process.env.VBEE_MODEL_FIELD || "model", process.env.VBEE_MODEL);
+  }
+  if (process.env.VBEE_RESPONSE_FORMAT) {
+    form.append(
+      process.env.VBEE_RESPONSE_FORMAT_FIELD || "response_format",
+      process.env.VBEE_RESPONSE_FORMAT,
+    );
+  }
+  if (process.env.VBEE_LANGUAGE_FIELD) {
+    form.append(
+      process.env.VBEE_LANGUAGE_FIELD,
+      normalizeLanguageCode(process.env.VBEE_LANGUAGE, "vi"),
+    );
+  }
+  if (process.env.VBEE_FILENAME_FIELD) {
+    form.append(process.env.VBEE_FILENAME_FIELD, filename);
+  }
+  if (process.env.VBEE_MODE_FIELD !== "false") {
+    form.append(process.env.VBEE_MODE_FIELD || "mode", "async");
+  }
   const webhookUrl = String(process.env.VBEE_STT_WEBHOOK_URL || "").trim();
   if (webhookUrl) form.append("webhookUrl", webhookUrl);
 
-  return vbeeSttRequest("/stt", {
+  return vbeeSttRequest(VBEE_TRANSCRIBE_PATH, {
     method: "POST",
     body: form,
     providerStage: "upload",
@@ -1294,8 +1465,10 @@ async function waitForVbeeCompletion(transcriptId, initialResponse) {
 
   while (Date.now() - startedAt < VBEE_STT_TIMEOUT_MS) {
     const status = getVbeeStatus(transcript);
-    if (status === "COMPLETED") return unwrapVbeeResponse(transcript);
-    if (status === "FAILED") {
+    if (["COMPLETED", "COMPLETE", "DONE", "SUCCESS"].includes(status)) {
+      return transcript;
+    }
+    if (["FAILED", "ERROR", "REJECTED", "CANCELLED"].includes(status)) {
       const body = unwrapVbeeResponse(transcript);
       throw createHttpError(
         500,
@@ -1308,7 +1481,10 @@ async function waitForVbeeCompletion(transcriptId, initialResponse) {
 
     await delay(VBEE_STT_POLL_INTERVAL_MS);
     transcript = await vbeeSttRequest(
-      `/stt/transcripts/${encodeURIComponent(transcriptId)}`,
+      VBEE_RESULT_PATH_TEMPLATE.replace(
+        "{id}",
+        encodeURIComponent(transcriptId),
+      ),
       { method: "GET", providerStage: "poll" },
     );
   }
@@ -1326,19 +1502,31 @@ async function transcribeWithVbee({ file, speakerLabels, filename, language }) {
     wavFile.originalname || `${stripExtension(filename)}.wav`,
   );
   const transcriptId = getVbeeTranscriptId(submitted);
-  if (!transcriptId) {
+  const submittedText = buildTextFromVbee(submitted, speakerLabels);
+  if (!transcriptId && !submittedText) {
     throw createHttpError(
       500,
-      "Vbee không trả về transcriptId sau khi tải file.",
+      "Vbee không trả về transcriptId hoặc văn bản sau khi tải file. Hãy kiểm tra các biến VBEE_*_PATH.",
     );
   }
 
-  const transcript = await waitForVbeeCompletion(transcriptId, submitted);
+  const submittedStatus = getVbeeStatus(submitted);
+  const transcript =
+    submittedText ||
+    ["COMPLETED", "COMPLETE", "DONE", "SUCCESS"].includes(submittedStatus)
+      ? submitted
+      : await waitForVbeeCompletion(transcriptId, submitted);
+  const body = unwrapVbeeResponse(transcript);
   return {
     provider: "vbee",
-    providerId: transcriptId,
+    providerId: transcriptId || null,
     duration:
-      transcript.audioDurationSeconds ?? transcript.audioDuration ?? null,
+      firstDefined(
+        getNestedValue(transcript, process.env.VBEE_DURATION_PATH),
+        body.audioDurationSeconds,
+        body.audioDuration,
+        body.duration,
+      ) ?? null,
     text: buildTextFromVbee(transcript, speakerLabels),
     words: normalizeVbeeWords(transcript),
     detectedLanguage:
@@ -1354,11 +1542,18 @@ function getSonixLanguage() {
   return configured === "auto" || configured === "multi" ? "vi" : configured;
 }
 
-function assertTranscriptionProviderReady() {
+async function assertTranscriptionProviderReady() {
   const errors = [];
-  for (const provider of getTranscriptionProviderChain()) {
+  const runtimePlan = await getTranscriptionRuntimePlan();
+  for (const provider of runtimePlan.providers) {
     try {
-      return assertProviderReady(provider);
+      const providerConfig = runtimePlan.configs.get(provider) || {
+        provider,
+        source: "env",
+      };
+      return providerConfigContext.run(providerConfig, () =>
+        assertProviderReady(provider),
+      );
     } catch (error) {
       errors.push(error.message);
     }
@@ -1807,8 +2002,9 @@ async function transcribeAudio({
   const providerFilename = providerFile.originalname || filename;
   const providerAttempts = [];
   const providerErrors = [];
+  const runtimePlan = await getTranscriptionRuntimePlan();
   const providers = prioritizeProvidersForLanguage(
-    getTranscriptionProviderChain(),
+    runtimePlan.providers,
     language,
     normalizedAudioMode,
   );
@@ -1856,16 +2052,21 @@ async function transcribeAudio({
     const provider = providers[index];
     const attemptedAt = Date.now();
     try {
-      const result = await executeProviderWithResilience(
+      const providerConfig = runtimePlan.configs.get(provider) || {
         provider,
-        async () => {
-          const providerResult = await runProvider(provider);
-          if (!String(providerResult?.text || "").trim()) {
-            throw createProviderResultError(provider, normalizedAudioMode);
-          }
-          assertProviderResultQuality(providerResult, normalizedAudioMode);
-          return providerResult;
-        },
+        source: "env",
+      };
+      const result = await providerConfigContext.run(
+        providerConfig,
+        () =>
+          executeProviderWithResilience(provider, async () => {
+            const providerResult = await runProvider(provider);
+            if (!String(providerResult?.text || "").trim()) {
+              throw createProviderResultError(provider, normalizedAudioMode);
+            }
+            assertProviderResultQuality(providerResult, normalizedAudioMode);
+            return providerResult;
+          }),
       );
       providerAttempts.push({
         provider,

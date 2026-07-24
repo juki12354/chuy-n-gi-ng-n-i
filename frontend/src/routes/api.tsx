@@ -57,7 +57,7 @@ type ApiResult = {
 export const Route = createFileRoute("/api")({
   head: () => ({
     meta: [
-      { title: "Vbee API — Tích hợp Speech to Text vào hệ thống" },
+      { title: "Vbee API — Tích hợp chuyển giọng nói thành văn bản vào hệ thống" },
       {
         name: "description",
         content:
@@ -228,7 +228,7 @@ function ApiPage() {
     } catch {
       setApiResult({
         error:
-          "Không gọi được API. Kiểm tra backend và key provider trong backend/.env.",
+          "Không gọi được API. Kiểm tra backend và key nhà cung cấp trong backend/.env.",
       });
     } finally {
       setTesting(false);
@@ -266,7 +266,7 @@ function ApiPage() {
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 md:grid-cols-[1fr_.85fr] md:px-6 md:py-12">
           <div className="relative z-10 min-w-0">
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-bold text-primary">
-              <PlugZap className="h-4 w-4" /> Vbee Speech to Text API
+              <PlugZap className="h-4 w-4" /> API chuyển giọng nói thành văn bản của Vbee
             </div>
             <h1 className="max-w-3xl text-2xl font-black leading-tight md:text-3xl">
               Tích hợp chuyển âm thanh thành văn bản vào sản phẩm của bạn.
@@ -316,8 +316,8 @@ function ApiPage() {
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 {[
                   [ShieldCheck, "Key bảo mật", "Lưu hash SHA-256"],
-                  [FileAudio, "Audio upload", "MP3, WAV, M4A, MP4"],
-                  [Zap, "Provider linh hoạt", "Deepgram, AssemblyAI, Google STT"],
+                  [FileAudio, "Tải âm thanh lên", "MP3, WAV, M4A, MP4"],
+                  [Zap, "Nhà cung cấp linh hoạt", "Deepgram, AssemblyAI, Google STT"],
                 ].map(([Icon, title, desc]) => (
                   <div
                     key={String(title)}
@@ -358,7 +358,7 @@ function ApiPage() {
             value={keyName}
             onChange={(e) => setKeyName(e.target.value)}
             className="mt-2 w-full rounded-lg border border-border bg-[#fbf8ef] px-4 py-2.5 font-semibold outline-none focus:border-primary"
-            placeholder="VD: Website chính, Mobile app, CRM..."
+            placeholder="VD: Website chính, ứng dụng di động, CRM..."
           />
           <button
             onClick={createKey}
@@ -469,7 +469,7 @@ function ApiPage() {
         <div className="grid gap-5 rounded-lg border border-border bg-white p-5 text-foreground shadow-soft md:grid-cols-[.9fr_1.1fr] md:p-6">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-black text-primary">
-              <UploadCloud className="h-4 w-4" /> Test API thật
+              <UploadCloud className="h-4 w-4" /> Kiểm thử API thật
             </div>
             <h2 className="text-xl font-black">
               Gọi thử endpoint bằng API key
@@ -597,7 +597,7 @@ function DocCard({
           onClick={() => void onCopy(code)}
           className="inline-flex items-center gap-2 rounded-full border border-border bg-background/45 px-3 py-2 text-xs font-black hover:bg-primary/10"
         >
-          <Clipboard className="h-4 w-4" /> Copy
+          <Clipboard className="h-4 w-4" /> Sao chép
         </button>
       </div>
       <pre className="max-w-full overflow-x-auto rounded-lg bg-[#fbf8ef] p-4 text-xs leading-6 text-primary">

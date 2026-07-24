@@ -59,7 +59,7 @@ export function getPendingPlanPurchase(): PendingPlanPurchase | null {
       plan: parsed.plan,
       billingCycle: parsed.billingCycle,
       planName: parsed.planName || parsed.plan,
-      requestedAt: parsed.requestedAt,
+      requestedAt: parsed.requestedAt ?? Date.now(),
     };
   } catch {
     clearPendingPlanPurchase();

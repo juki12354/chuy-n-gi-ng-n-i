@@ -108,7 +108,7 @@ function ContactPage() {
               Kết nối theo cách thuận tiện nhất cho bạn.
             </h2>
             <p className="mt-4 text-sm leading-7 text-[#6a5a8f]">
-              Với yêu cầu kỹ thuật, bạn cũng có thể gửi ticket tại trung tâm hỗ
+              Với yêu cầu kỹ thuật, bạn cũng có thể gửi yêu cầu tại trung tâm hỗ
               trợ để đội ngũ theo dõi trạng thái xử lý.
             </p>
 
@@ -144,7 +144,7 @@ function ContactPage() {
 
             <Link to="/support" className="mt-7 inline-flex items-center gap-2 text-sm font-black text-[#21104a] transition hover:text-[#8a7100]">
               <Headphones className="h-5 w-5 text-[#8a7100]" />
-              Cần hỗ trợ kỹ thuật? Gửi ticket
+              Cần hỗ trợ kỹ thuật? Gửi yêu cầu
               <ArrowRight className="h-4 w-4" />
             </Link>
           </aside>
@@ -201,7 +201,7 @@ function ContactPage() {
       <section className="bg-[#f7f5ff] px-4 py-10 md:px-6">
         <div className="mx-auto grid max-w-7xl gap-4 md:grid-cols-3">
           {[
-            [Clock3, "Tiếp nhận rõ ràng", "Mọi yêu cầu gửi từ form được tạo thành ticket để theo dõi."],
+            [Clock3, "Tiếp nhận rõ ràng", "Mọi yêu cầu gửi từ form được tạo thành hồ sơ để theo dõi."],
             [MessageCircle, "Đúng nhu cầu", "Chọn đúng mục đích liên hệ giúp Vbee phân loại nhanh hơn."],
             [Headphones, "Có kênh hỗ trợ", "Vấn đề thao tác, quota hoặc API có trang hỗ trợ riêng."],
           ].map(([Icon, title, text]) => {

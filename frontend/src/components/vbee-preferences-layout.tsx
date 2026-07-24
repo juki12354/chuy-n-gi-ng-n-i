@@ -86,7 +86,7 @@ export function VbeePreferencesSidebar({
 export function VbeePreferencesFooter() {
   return (
     <footer className="border-t border-border px-4 py-8 text-center text-sm text-muted-foreground">
-      <p>© 2026 Vbee AIVoice. All rights reserved.</p>
+      <p>© 2026 Vbee AIVoice. Đã đăng ký bản quyền.</p>
       <div className="mt-2 flex flex-wrap justify-center gap-4">
         {["Vbee.ai", "Bảng giá", "Giới thiệu", "Bảo mật", "Điều khoản", "Hỗ trợ"].map(
           (item) => (

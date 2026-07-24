@@ -231,7 +231,7 @@ function LoginPage() {
 
             <p className="mt-4 text-center text-sm text-muted-foreground">
               Chưa có tài khoản?{" "}
-              <Link to="/register" search={{ data: undefined, from }} className="text-primary font-semibold hover:underline">
+              <Link to="/register" search={{ from, ref: undefined }} className="text-primary font-semibold hover:underline">
                 Tạo tài khoản mới
               </Link>
             </p>

@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("../config/env");
 const express = require("express");
 const pool = require("../db");
 const { hashApiKey } = require("./apiKeys");
@@ -107,12 +107,14 @@ async function apiKeyAuth(req, res, next) {
   }
 }
 
-router.get("/health", (_req, res) => {
+router.get("/health", async (_req, res) => {
   res.json({
     status: "ok",
     service: "Vbee API",
     version: "v1",
-    ...(IS_PRODUCTION ? {} : { transcriptionProvider: getTranscriptionProvider() }),
+    ...(IS_PRODUCTION
+      ? {}
+      : { transcriptionProvider: await getTranscriptionProvider() }),
   });
 });
 
@@ -157,7 +159,7 @@ router.post(
         return res.status(400).json({ error: "Vui lòng chọn file âm thanh" });
       }
       req.file.originalname = normalizeFilename(req.file.originalname);
-      assertTranscriptionProviderReady();
+      await assertTranscriptionProviderReady();
       const source = req.body.source === "recording" ? "recording" : "api";
       const { durationSeconds: expectedDurationSeconds } =
         await probeMediaFile(req.file);

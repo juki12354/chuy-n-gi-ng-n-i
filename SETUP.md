@@ -90,6 +90,16 @@ ADMIN_EMAILS=admin@congty.vn
 SUPER_ADMIN_EMAILS=quantri@congty.vn
 ```
 
+CMS V1 cũng hỗ trợ tạo Super Admin có chủ đích khi khởi tạo database. Phải điền
+cả hai biến dưới đây và dùng mật khẩu tối thiểu 12 ký tự; dự án không có tài
+khoản hoặc mật khẩu quản trị mặc định:
+
+```env
+ADMIN_SEED_EMAIL=quantri@congty.vn
+ADMIN_SEED_PASSWORD=mat-khau-rieng-toi-thieu-12-ky-tu
+PROVIDER_SECRET_KEY=chuoi-ngau-nhien-rieng-de-ma-hoa-api-key
+```
+
 ### Cảnh báo quota cho quản trị viên
 
 CMS tự tạo cảnh báo khi quota thực tế còn 20%, 5% hoặc 0%. Cảnh báo được
@@ -310,6 +320,12 @@ Trang chủ → Bấm nút → Chuyển đến /login
 | VBEE_API_KEY_HEADER | Tên header chứa API key | X-API-Key |
 | VBEE_API_KEY_SCHEME | Tiền tố key; để trống với X-API-Key |  |
 | VBEE_STT_API_BASE_URL | Endpoint Vbee STT UAT | https://uat-api.vbeelabs.ai |
+| VBEE_TRANSCRIBE_PATH | Path gửi file; đổi theo tài liệu API Vbee đang dùng | /stt |
+| VBEE_RESULT_PATH_TEMPLATE | Path polling, dùng `{id}` cho mã job | /stt/transcripts/{id} |
+| VBEE_ID_PATH | Dot path tới mã job nếu response không dùng trường mặc định | data.id |
+| VBEE_STATUS_PATH | Dot path tới trạng thái job | data.status |
+| VBEE_TEXT_PATH | Dot path tới văn bản kết quả | data.text |
+| PROVIDER_SECRET_KEY | Khóa riêng để mã hóa API key lưu trong CMS | random_long_string |
 | SONIX_API_KEY | API key Sonix.ai | your_sonix_api_key |
 | SONIX_LANGUAGE | Mã ngôn ngữ Sonix | vi |
 | DEEPGRAM_API_KEY | API key Deepgram | your_deepgram_api_key |

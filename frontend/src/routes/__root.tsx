@@ -39,10 +39,11 @@ function SupportChat() {
       return;
     }
 
+    const authToken = token;
     let cancelled = false;
     async function loadQuota() {
       try {
-        const data = await fetchQuota(token);
+        const data = await fetchQuota(authToken);
         if (!cancelled) {
           setQuota(data);
           setQuotaError("");
@@ -101,7 +102,7 @@ function SupportChat() {
               </div>
               <div>
                 <p className="text-xs font-semibold text-[oklch(0.16_0.01_80)]">
-                  Vbee Support
+                  Hỗ trợ Vbee
                 </p>
                 <div className="flex items-center gap-1">
                   <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
