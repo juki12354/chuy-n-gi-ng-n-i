@@ -51,10 +51,46 @@ export interface CheckoutResponse {
   paymentUrl: string;
 }
 
+export interface BillingCatalogPlan {
+  code: PlanCode;
+  label: string;
+  monthly: { price: number | null; quotaSeconds: number };
+  yearly: { price: number | null; quotaSeconds: number };
+  limits: {
+    maxUploadMb: number;
+    maxRecordSeconds: number;
+    maxFileSeconds: number;
+  };
+  queueWeight: number;
+  seats: number;
+  retentionDays: number;
+  apiAccess: boolean;
+}
+
+export interface BillingCatalogTopUp {
+  code: TopUpCode;
+  label: string;
+  quotaSeconds: number;
+  price: number;
+  validDays: number | null;
+}
+
+export interface BillingCatalog {
+  plans: BillingCatalogPlan[];
+  topUps: BillingCatalogTopUp[];
+}
+
 async function readJson<T>(res: Response): Promise<T> {
   const data = (await res.json()) as T & { error?: string };
   if (!res.ok) throw new Error(data.error || "Yêu cầu không thành công");
   return data;
+}
+
+export async function fetchBillingCatalog(): Promise<BillingCatalog> {
+  const res = await fetch(`${API_URL}/api/billing/plans`, {
+    cache: "no-store",
+  });
+  return readJson<BillingCatalog>(res);
 }
 
 export async function createCheckout(

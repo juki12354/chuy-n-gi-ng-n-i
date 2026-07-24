@@ -25,10 +25,15 @@ const billingRoutes = require("./routes/billing");
 const settingsRoutes = require("./routes/settings");
 const supportRoutes = require("./routes/support");
 const referralRoutes = require("./routes/referrals");
+const adminRoutes = require("./routes/admin");
 const initDatabase = require("./initDb");
 const { getTranscriptionProvider } = require("./services/transcriptionService");
 const { startTranscriptionWorker } = require("./services/transcriptionQueue");
 const { cleanupExpiredStagingFiles } = require("./services/uploadStorage");
+const { startQuotaAlertDispatcher } = require("./services/quotaAlertService");
+const {
+  startBillingReconciliationDispatcher,
+} = require("./services/billingService");
 
 const app = express();
 app.disable("x-powered-by");
@@ -66,6 +71,7 @@ app.use("/api/billing", billingRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/support", supportRoutes);
 app.use("/api/referrals", referralRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/v1", publicApiRoutes);
 
 app.get("/", (_req, res) => {
@@ -110,6 +116,8 @@ initDatabase()
       15 * 60 * 1000,
     );
     stagingCleanupTimer.unref?.();
+    startQuotaAlertDispatcher();
+    startBillingReconciliationDispatcher();
     await startTranscriptionWorker();
     const server = app.listen(PORT, () => {
       console.log(`Backend server đang chạy tại http://localhost:${PORT}`);

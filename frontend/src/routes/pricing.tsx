@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   BadgeCheck,
@@ -27,6 +27,8 @@ import { useAuth } from "@/context/AuthContext";
 import {
   createCheckout,
   createTopUpCheckout,
+  fetchBillingCatalog,
+  type BillingCatalog,
   type TopUpCode,
 } from "@/lib/billing";
 import { type PlanCode } from "@/lib/quota";
@@ -61,6 +63,17 @@ type TopUp = {
   desc: string;
   popular?: boolean;
 };
+
+function formatVnd(value: number | null | undefined) {
+  return Number.isFinite(value)
+    ? `${new Intl.NumberFormat("vi-VN").format(Number(value))}đ`
+    : "Liên hệ";
+}
+
+function formatQuotaHours(seconds: number, yearly: boolean) {
+  const hours = Math.round(seconds / 3600);
+  return `${hours} giờ${yearly ? "/năm" : ""}`;
+}
 
 export const Route = createFileRoute("/pricing")({
   head: () => ({
@@ -393,10 +406,63 @@ function PricingPage() {
   const [billing, setBilling] = useState<BillingCycle>("monthly");
   const [planMessage, setPlanMessage] = useState("");
   const [upgradingPlan, setUpgradingPlan] = useState("");
+  const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
   const { user, token } = useAuth();
   const navigate = useNavigate();
   const pendingPurchaseStarted = useRef(false);
-  const plans = billing === "monthly" ? monthlyPlans : yearlyPlans;
+  const plans = useMemo(() => {
+    const basePlans = billing === "monthly" ? monthlyPlans : yearlyPlans;
+    return basePlans.map((plan) => {
+      const catalogPlan = catalog?.plans.find(
+        (item) => item.code === plan.code,
+      );
+      const cycle = catalogPlan?.[billing];
+      return cycle
+        ? {
+            ...plan,
+            price: formatVnd(cycle.price),
+            minutes: formatQuotaHours(cycle.quotaSeconds, billing === "yearly"),
+          }
+        : plan;
+    });
+  }, [billing, catalog]);
+  const resolvedTopUps = useMemo(
+    () =>
+      topUps.map((product) => {
+        const catalogProduct = catalog?.topUps.find(
+          (item) => item.code === product.code,
+        );
+        return catalogProduct
+          ? {
+              ...product,
+              hours: formatQuotaHours(catalogProduct.quotaSeconds, false),
+              price: formatVnd(catalogProduct.price),
+            }
+          : product;
+      }),
+    [catalog],
+  );
+  const hourlyPrice =
+    resolvedTopUps.find((product) => product.code === "topup_1h")?.price ||
+    "39.000đ";
+
+  useEffect(() => {
+    let active = true;
+    void fetchBillingCatalog()
+      .then((nextCatalog) => {
+        if (active) setCatalog(nextCatalog);
+      })
+      .catch(() => {
+        if (active) {
+          setPlanMessage(
+            "Không tải được bảng giá mới nhất. Vui lòng thử lại trước khi thanh toán.",
+          );
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!user || !token || pendingPurchaseStarted.current) return;
@@ -535,17 +601,24 @@ function PricingPage() {
       )}
       <PlanCards
         plans={plans}
+        hourlyPrice={hourlyPrice}
         billing={billing}
         upgradingPlan={upgradingPlan}
         onSelectPlan={(plan) => void handleSelectPlan(plan)}
       />
       <TopUpCards
-        products={topUps}
+        products={resolvedTopUps}
+        hourlyPrice={hourlyPrice}
         busyProduct={upgradingPlan}
         onSelect={(product) => void handleSelectTopUp(product)}
       />
       <PricingValueBand />
-      <CompareTable billing={billing} setBilling={setBilling} />
+      <CompareTable
+        billing={billing}
+        setBilling={setBilling}
+        hourlyPrice={hourlyPrice}
+        plans={plans}
+      />
       <PricingFaq />
       <EnterpriseCta onStart={handleStart} />
       <PricingFooter />
@@ -655,11 +728,13 @@ function BillingToggle({
 
 function PlanCards({
   plans,
+  hourlyPrice,
   billing,
   upgradingPlan,
   onSelectPlan,
 }: {
   plans: Plan[];
+  hourlyPrice: string;
   billing: BillingCycle;
   upgradingPlan: string;
   onSelectPlan: (plan: Plan) => void;
@@ -712,7 +787,7 @@ function PlanCards({
 
             <div className="mt-6 flex items-end gap-1">
               <span className="text-2xl font-black tracking-tight md:text-3xl">
-                39.000đ
+                {hourlyPrice}
               </span>
               <span className="pb-1 text-sm font-bold text-[#6a5a8f]">
                 /giờ
@@ -861,10 +936,12 @@ function PlanCards({
 
 function TopUpCards({
   products,
+  hourlyPrice,
   busyProduct,
   onSelect,
 }: {
   products: TopUp[];
+  hourlyPrice: string;
   busyProduct: string;
   onSelect: (product: TopUp) => void;
 }) {
@@ -895,7 +972,7 @@ function TopUpCards({
 
             <div className="mt-7 space-y-4 border-t border-white/15 pt-6 text-sm font-semibold text-white/82">
               {[
-                "39.000đ cho mỗi giờ chuyển đổi",
+                `${hourlyPrice} cho mỗi giờ chuyển đổi`,
                 "Thời lượng đã mua không hết hạn",
                 "Cộng trực tiếp vào quota hiện có",
                 "Thanh toán QR ngay trên website",
@@ -1028,9 +1105,13 @@ function PricingValueBand() {
 function CompareTable({
   billing,
   setBilling,
+  hourlyPrice,
+  plans,
 }: {
   billing: BillingCycle;
   setBilling: (billing: BillingCycle) => void;
+  hourlyPrice: string;
+  plans: Plan[];
 }) {
   const yearlyMultiplier = billing === "yearly";
 
@@ -1075,19 +1156,28 @@ function CompareTable({
                   <th className="w-[28%] px-5 py-5 text-xs font-black uppercase tracking-wide text-[#6a5a8f]">
                     Tính năng
                   </th>
-                  <PlanHead name="Theo lượt" price="39.000đ/giờ" />
+                  <PlanHead name="Theo lượt" price={`${hourlyPrice}/giờ`} />
                   <PlanHead
                     name="Tiêu chuẩn"
-                    price={billing === "monthly" ? "150.000đ" : "1.650.000đ"}
+                    price={
+                      plans.find((plan) => plan.code === "standard")?.price ||
+                      "Liên hệ"
+                    }
                   />
                   <PlanHead
                     name="Đặc biệt"
-                    price={billing === "monthly" ? "449.000đ" : "4.939.000đ"}
+                    price={
+                      plans.find((plan) => plan.code === "special")?.price ||
+                      "Liên hệ"
+                    }
                     highlight
                   />
                   <PlanHead
                     name="Chuyên nghiệp"
-                    price={billing === "monthly" ? "799.000đ" : "8.789.000đ"}
+                    price={
+                      plans.find((plan) => plan.code === "business")?.price ||
+                      "Liên hệ"
+                    }
                   />
                 </tr>
               </thead>

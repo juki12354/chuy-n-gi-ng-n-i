@@ -57,19 +57,19 @@ const homeNavigation = [
       {
         title: "Tải file",
         desc: "Audio/video thành văn bản có tính thời lượng.",
-        href: "#features",
+        href: "/upload",
         icon: UploadCloud,
       },
       {
         title: "Ghi âm",
         desc: "Thu âm trên trình duyệt và lưu transcript.",
-        href: "#features",
+        href: "/record",
         icon: Mic2,
       },
       {
         title: "Nói realtime",
         desc: "Ghi chú trực tiếp cho họp và trao đổi công việc.",
-        href: "#features",
+        href: "/realtime",
         icon: AudioLines,
       },
     ],

@@ -194,6 +194,8 @@ function RecordPage() {
 
   useEffect(() => {
     void checkMicrophoneStatus();
+    // The initial permission probe should only run once when this screen mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

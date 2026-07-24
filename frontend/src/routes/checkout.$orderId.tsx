@@ -56,6 +56,9 @@ function CheckoutPage() {
   const [paymentQrImage, setPaymentQrImage] = useState("");
   const [paymentQrError, setPaymentQrError] = useState("");
 
+  const activeOrderId = order?.id;
+  const activeOrderExpiresAt = order?.expiresAt;
+
   useEffect(() => {
     if (isLoading) return;
     if (!user || !token) {
@@ -92,15 +95,31 @@ function CheckoutPage() {
   useEffect(() => {
     if (
       !token ||
-      !order ||
+      !activeOrderId ||
       order.status !== "pending" ||
       order.provider !== "payos"
     ) {
       return;
     }
 
-    const interval = window.setInterval(() => {
-      void fetchBillingOrder(token, order.id)
+    const checkPayment = () => {
+      const expiresAt = activeOrderExpiresAt
+        ? new Date(activeOrderExpiresAt).getTime()
+        : Number.NaN;
+      if (
+        Number.isFinite(expiresAt) &&
+        expiresAt + 5 * 60 * 1000 < Date.now()
+      ) {
+        setOrder((current) =>
+          current?.id === activeOrderId
+            ? { ...current, status: "expired" }
+            : current,
+        );
+        setMessage("Đơn thanh toán đã hết hạn. Vui lòng tạo đơn mới.");
+        return;
+      }
+
+      void fetchBillingOrder(token, activeOrderId)
         .then((nextOrder) => {
           setOrder(nextOrder);
           if (nextOrder.status === "paid") {
@@ -117,10 +136,20 @@ function CheckoutPage() {
         .catch(() => {
           // A short network interruption should not replace the active checkout UI.
         });
-    }, 4000);
+    };
+
+    checkPayment();
+    const interval = window.setInterval(checkPayment, 4000);
 
     return () => window.clearInterval(interval);
-  }, [order?.id, order?.provider, order?.status, token, updateUser]);
+  }, [
+    activeOrderExpiresAt,
+    activeOrderId,
+    order?.provider,
+    order?.status,
+    token,
+    updateUser,
+  ]);
 
   useEffect(() => {
     if (order?.status === "paid") {

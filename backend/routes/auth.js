@@ -35,6 +35,25 @@ const {
   normalizeReferralCode,
   registerReferralForNewUser,
 } = require('../services/referralService');
+const {
+  consumeOAuthState,
+  createOAuthState,
+  hashOAuthValue,
+} = require('../services/oauthStateService');
+const {
+  findOrCreateSocialUser,
+} = require('../services/socialIdentityService');
+const {
+  createFacebookAuthorizationUrl,
+  exchangeFacebookCode,
+  hasFacebookOAuth,
+} = require('../services/facebookOAuthService');
+const {
+  assertAppleNonce,
+  createAppleAuthorizationUrl,
+  exchangeAppleCode,
+  hasAppleOAuth,
+} = require('../services/appleOAuthService');
 
 const router = express.Router();
 router.use((_req, res, next) => {
@@ -81,6 +100,8 @@ function normalizeUser(row) {
     email: row.email,
     avatar: row.avatar ?? null,
     plan: normalizePlan(row.plan),
+    role: row.role || 'user',
+    accountStatus: row.account_status || 'active',
   };
 }
 
@@ -103,6 +124,71 @@ function validatePassword(password) {
   ]);
   if (blocked.has(normalized)) return 'Mật khẩu này quá phổ biến';
   return '';
+}
+
+async function completeOAuthLogin({
+  provider,
+  profile,
+  referralCode,
+  req,
+  res,
+}) {
+  const { user, createdNewUser } = await findOrCreateSocialUser({
+    provider,
+    ...profile,
+  });
+  if (user.account_status !== 'active') {
+    const error = new Error('Tài khoản đã bị khóa.');
+    error.oauthCode = 'account_blocked';
+    throw error;
+  }
+
+  let referralRegistration = null;
+  if (createdNewUser && referralCode) {
+    try {
+      referralRegistration = await registerReferralForNewUser(
+        user.id,
+        referralCode,
+      );
+    } catch (referralError) {
+      console.error(
+        `${provider} referral registration error:`,
+        referralError.message,
+      );
+    }
+  }
+
+  const session = await issueSession(user, req, res);
+  await writeSecurityAudit({
+    event: `auth.${provider}_login`,
+    outcome: 'success',
+    req,
+    userId: user.id,
+    sessionId: session.sessionId,
+    metadata: {
+      newUser: createdNewUser,
+      referralRegistered: Boolean(referralRegistration?.registered),
+    },
+  });
+  return res.redirect(`${FRONTEND_URL}/dashboard`);
+}
+
+async function handleOAuthFailure({ provider, error, req, res }) {
+  console.error(`${provider} callback error:`, error.message);
+  await writeSecurityAudit({
+    event: `auth.${provider}_login`,
+    outcome: 'failure',
+    req,
+    metadata: { reason: error.oauthCode || error.message },
+  }).catch(() => {});
+  const code =
+    String(error.oauthCode || '').startsWith(`${provider}_`) ||
+    error.oauthCode === 'account_blocked'
+      ? error.oauthCode
+      : `${provider}_failed`;
+  return res.redirect(
+    `${FRONTEND_URL}/login?error=${encodeURIComponent(code)}`,
+  );
 }
 
 // GET /api/auth/google — khởi tạo OAuth với Google
@@ -193,82 +279,174 @@ router.get(
         path: '/',
       });
       const { googleId, email, emailVerified, firstName, lastName, photo } = req.user;
-      const cleanEmail = String(email || '').trim().toLowerCase();
-      if (!googleId || !cleanEmail || emailVerified === false) {
-        return res.redirect(`${FRONTEND_URL}/login?error=google_failed`);
-      }
-
-      const byGoogle = await pool.query(
-        `SELECT id, first_name, last_name, email, avatar, plan, auth_version
-         FROM users WHERE google_id = $1`,
-        [googleId]
-      );
-      let user = byGoogle.rows[0];
-      let createdNewUser = false;
-      let referralRegistration = null;
-
-      if (!user) {
-        const emailOwner = await pool.query(
-          'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',
-          [cleanEmail]
-        );
-        if (emailOwner.rows[0]) {
-          return res.redirect(`${FRONTEND_URL}/login?error=google_email_exists`);
-        }
-
-        const inserted = await pool.query(
-          `INSERT INTO users (
-             first_name, last_name, email, password, google_id, avatar
-           ) VALUES ($1, $2, $3, NULL, $4, $5)
-           RETURNING id, first_name, last_name, email, avatar, plan, auth_version`,
-          [
-            String(firstName || 'Người dùng').trim().slice(0, 100),
-            String(lastName || 'Google').trim().slice(0, 100),
-            cleanEmail,
-            googleId,
-            /^https:\/\//i.test(String(photo || '')) ? String(photo).slice(0, 2000) : null,
-          ]
-        );
-        user = inserted.rows[0];
-        createdNewUser = true;
-      }
-
-      if (createdNewUser && referralCode) {
-        try {
-          referralRegistration = await registerReferralForNewUser(
-            user.id,
-            referralCode,
-          );
-        } catch (referralError) {
-          console.error('Google referral registration error:', referralError.message);
-        }
-      }
-
-      const session = await issueSession(user, req, res);
-      await writeSecurityAudit({
-        event: 'auth.google_login',
-        outcome: 'success',
-        req,
-        userId: user.id,
-        sessionId: session.sessionId,
-        metadata: {
-          newUser: createdNewUser,
-          referralRegistered: Boolean(referralRegistration?.registered),
+      return completeOAuthLogin({
+        provider: 'google',
+        profile: {
+          providerUserId: googleId,
+          email,
+          emailVerified,
+          firstName,
+          lastName,
+          avatar: photo,
         },
-      });
-      return res.redirect(`${FRONTEND_URL}/dashboard`);
-    } catch (error) {
-      console.error('Google callback error:', error);
-      await writeSecurityAudit({
-        event: 'auth.google_login',
-        outcome: 'failure',
+        referralCode,
         req,
-        metadata: { reason: error.message },
+        res,
       });
-      return res.redirect(`${FRONTEND_URL}/login?error=server_error`);
+    } catch (error) {
+      return handleOAuthFailure({
+        provider: 'google',
+        error,
+        req,
+        res,
+      });
     }
   }
 );
+
+// GET /api/auth/facebook — bắt đầu Facebook Login.
+router.get('/facebook', oauthLimiter, async (req, res) => {
+  try {
+    if (!hasFacebookOAuth()) {
+      return res.redirect(
+        `${FRONTEND_URL}/login?error=facebook_not_configured`,
+      );
+    }
+    const state = await createOAuthState({
+      provider: 'facebook',
+      referralCode: normalizeReferralCode(req.query.ref),
+    });
+    return res.redirect(createFacebookAuthorizationUrl(state));
+  } catch (error) {
+    return handleOAuthFailure({
+      provider: 'facebook',
+      error,
+      req,
+      res,
+    });
+  }
+});
+
+// GET /api/auth/facebook/callback — Facebook trả authorization code.
+router.get('/facebook/callback', oauthLimiter, async (req, res) => {
+  try {
+    if (!hasFacebookOAuth()) {
+      const error = new Error('Facebook OAuth chưa được cấu hình.');
+      error.oauthCode = 'facebook_not_configured';
+      throw error;
+    }
+    if (req.query.error || !req.query.code) {
+      const error = new Error('Người dùng hủy hoặc Facebook từ chối đăng nhập.');
+      error.oauthCode = 'facebook_failed';
+      throw error;
+    }
+    const state = await consumeOAuthState({
+      provider: 'facebook',
+      state: String(req.query.state || ''),
+    });
+    if (!state) {
+      const error = new Error('Facebook OAuth state không hợp lệ.');
+      error.oauthCode = 'facebook_failed';
+      throw error;
+    }
+    const profile = await exchangeFacebookCode(req.query.code);
+    return completeOAuthLogin({
+      provider: 'facebook',
+      profile,
+      referralCode: state.referral_code,
+      req,
+      res,
+    });
+  } catch (error) {
+    return handleOAuthFailure({
+      provider: 'facebook',
+      error,
+      req,
+      res,
+    });
+  }
+});
+
+// GET /api/auth/apple — bắt đầu Sign in with Apple.
+router.get('/apple', oauthLimiter, async (req, res) => {
+  try {
+    if (!hasAppleOAuth()) {
+      return res.redirect(`${FRONTEND_URL}/login?error=apple_not_configured`);
+    }
+    const nonce = crypto.randomBytes(32).toString('base64url');
+    const state = await createOAuthState({
+      provider: 'apple',
+      referralCode: normalizeReferralCode(req.query.ref),
+      nonce,
+    });
+    return res.redirect(createAppleAuthorizationUrl({ state, nonce }));
+  } catch (error) {
+    return handleOAuthFailure({
+      provider: 'apple',
+      error,
+      req,
+      res,
+    });
+  }
+});
+
+// POST /api/auth/apple/callback — Apple dùng response_mode=form_post.
+router.post('/apple/callback', oauthLimiter, async (req, res) => {
+  try {
+    if (!hasAppleOAuth()) {
+      const error = new Error('Apple OAuth chưa được cấu hình.');
+      error.oauthCode = 'apple_not_configured';
+      throw error;
+    }
+    if (req.body.error || !req.body.code) {
+      const error = new Error('Người dùng hủy hoặc Apple từ chối đăng nhập.');
+      error.oauthCode = 'apple_failed';
+      throw error;
+    }
+    const state = await consumeOAuthState({
+      provider: 'apple',
+      state: String(req.body.state || ''),
+    });
+    if (!state?.nonce_hash) {
+      const error = new Error('Apple OAuth state không hợp lệ.');
+      error.oauthCode = 'apple_failed';
+      throw error;
+    }
+
+    const profile = await exchangeAppleCode(req.body.code);
+    assertAppleNonce(profile.nonce, state.nonce_hash, hashOAuthValue);
+    let firstName = '';
+    let lastName = '';
+    if (req.body.user) {
+      try {
+        const appleUser = JSON.parse(String(req.body.user));
+        firstName = appleUser.name?.firstName || '';
+        lastName = appleUser.name?.lastName || '';
+        if (!profile.email) profile.email = appleUser.email || '';
+      } catch {
+        // Apple chỉ gửi user object ở lần cấp quyền đầu tiên.
+      }
+    }
+    return completeOAuthLogin({
+      provider: 'apple',
+      profile: {
+        ...profile,
+        firstName,
+        lastName,
+      },
+      referralCode: state.referral_code,
+      req,
+      res,
+    });
+  } catch (error) {
+    return handleOAuthFailure({
+      provider: 'apple',
+      error,
+      req,
+      res,
+    });
+  }
+});
 
 // POST /api/auth/register — đăng ký tài khoản mới bằng email/password
 router.post('/register', requireTrustedOrigin, registrationLimiter, async (req, res) => {
@@ -301,7 +479,8 @@ router.post('/register', requireTrustedOrigin, registrationLimiter, async (req, 
     const { rows } = await pool.query(
       `INSERT INTO users (first_name, last_name, email, password)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, first_name, last_name, email, avatar, plan, auth_version`,
+       RETURNING id, first_name, last_name, email, avatar, plan, auth_version,
+                 role, account_status`,
       [cleanFirstName, cleanLastName, cleanEmail, hashedPassword]
     );
 
@@ -361,7 +540,9 @@ router.post('/login', requireTrustedOrigin, loginLimiter, async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      'SELECT id, first_name, last_name, email, password, avatar, plan, auth_version FROM users WHERE LOWER(email) = LOWER($1)',
+      `SELECT id, first_name, last_name, email, password, avatar, plan,
+              auth_version, role, account_status
+       FROM users WHERE LOWER(email) = LOWER($1)`,
       [email]
     );
 
@@ -380,6 +561,16 @@ router.post('/login', requireTrustedOrigin, loginLimiter, async (req, res) => {
     }
 
     const user = rows[0];
+    if (user.account_status !== 'active') {
+      await writeSecurityAudit({
+        event: 'auth.login',
+        outcome: 'failure',
+        req,
+        userId: user.id,
+        metadata: { reason: 'account_blocked' },
+      });
+      return res.status(403).json({ error: 'Tài khoản đã bị khóa' });
+    }
     const session = await issueSession(user, req, res);
     await writeSecurityAudit({
       event: 'auth.login',
@@ -580,11 +771,14 @@ router.post('/refresh', requireTrustedOrigin, refreshLimiter, async (req, res) =
       return res.status(401).json({ error: 'Phiên đăng nhập đã hết hạn' });
     }
     const { rows } = await pool.query(
-      `SELECT id, first_name, last_name, email, avatar, plan
+      `SELECT id, first_name, last_name, email, avatar, plan, role, account_status
        FROM users WHERE id = $1`,
       [session.userId]
     );
     if (!rows[0]) return res.status(401).json({ error: 'Không tìm thấy tài khoản' });
+    if (rows[0].account_status !== 'active') {
+      return res.status(403).json({ error: 'Tài khoản đã bị khóa' });
+    }
     return res.json({
       token: session.token,
       expiresIn: session.expiresIn,
@@ -642,7 +836,7 @@ router.post('/change-password', requireTrustedOrigin, passwordLimiter, requireAu
         metadata: { reason: 'no_local_password' },
       });
       return res.status(400).json({
-        error: 'Tài khoản này đăng nhập bằng Google. Hãy dùng Quên mật khẩu để tạo mật khẩu mới.',
+        error: 'Tài khoản này đăng nhập bằng mạng xã hội. Hãy dùng Quên mật khẩu để tạo mật khẩu mới.',
       });
     }
 
@@ -728,7 +922,7 @@ router.patch('/profile', requireAuth, async (req, res) => {
     const { rows } = await pool.query(
       `UPDATE users SET first_name = $1, last_name = $2
        WHERE id = $3
-       RETURNING id, first_name, last_name, email, avatar, plan`,
+       RETURNING id, first_name, last_name, email, avatar, plan, role, account_status`,
       [cleanFirstName, cleanLastName, req.user.id]
     );
 
@@ -769,7 +963,7 @@ router.post('/avatar', requireAuth, async (req, res) => {
     const { rows } = await pool.query(
       `UPDATE users SET avatar = $1
        WHERE id = $2
-       RETURNING id, first_name, last_name, email, avatar, plan`,
+       RETURNING id, first_name, last_name, email, avatar, plan, role, account_status`,
       [avatar, req.user.id]
     );
 

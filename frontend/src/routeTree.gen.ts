@@ -25,8 +25,10 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CustomDictionaryRouteImport } from './routes/custom-dictionary'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as ApiRouteImport } from './routes/api'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TranscriptIdRouteImport } from './routes/transcript.$id'
 import { Route as CheckoutOrderIdRouteImport } from './routes/checkout.$orderId'
 
 const UploadRoute = UploadRouteImport.update({
@@ -109,6 +111,11 @@ const ApiRoute = ApiRouteImport.update({
   path: '/api',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
@@ -117,6 +124,11 @@ const AboutRoute = AboutRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TranscriptIdRoute = TranscriptIdRouteImport.update({
+  id: '/transcript/$id',
+  path: '/transcript/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CheckoutOrderIdRoute = CheckoutOrderIdRouteImport.update({
@@ -128,6 +140,7 @@ const CheckoutOrderIdRoute = CheckoutOrderIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/admin': typeof AdminRoute
   '/api': typeof ApiRoute
   '/contact': typeof ContactRoute
   '/custom-dictionary': typeof CustomDictionaryRoute
@@ -145,10 +158,12 @@ export interface FileRoutesByFullPath {
   '/transcription-settings': typeof TranscriptionSettingsRoute
   '/upload': typeof UploadRoute
   '/checkout/$orderId': typeof CheckoutOrderIdRoute
+  '/transcript/$id': typeof TranscriptIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/admin': typeof AdminRoute
   '/api': typeof ApiRoute
   '/contact': typeof ContactRoute
   '/custom-dictionary': typeof CustomDictionaryRoute
@@ -166,11 +181,13 @@ export interface FileRoutesByTo {
   '/transcription-settings': typeof TranscriptionSettingsRoute
   '/upload': typeof UploadRoute
   '/checkout/$orderId': typeof CheckoutOrderIdRoute
+  '/transcript/$id': typeof TranscriptIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/admin': typeof AdminRoute
   '/api': typeof ApiRoute
   '/contact': typeof ContactRoute
   '/custom-dictionary': typeof CustomDictionaryRoute
@@ -188,12 +205,14 @@ export interface FileRoutesById {
   '/transcription-settings': typeof TranscriptionSettingsRoute
   '/upload': typeof UploadRoute
   '/checkout/$orderId': typeof CheckoutOrderIdRoute
+  '/transcript/$id': typeof TranscriptIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/about'
+    | '/admin'
     | '/api'
     | '/contact'
     | '/custom-dictionary'
@@ -211,10 +230,12 @@ export interface FileRouteTypes {
     | '/transcription-settings'
     | '/upload'
     | '/checkout/$orderId'
+    | '/transcript/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/about'
+    | '/admin'
     | '/api'
     | '/contact'
     | '/custom-dictionary'
@@ -232,10 +253,12 @@ export interface FileRouteTypes {
     | '/transcription-settings'
     | '/upload'
     | '/checkout/$orderId'
+    | '/transcript/$id'
   id:
     | '__root__'
     | '/'
     | '/about'
+    | '/admin'
     | '/api'
     | '/contact'
     | '/custom-dictionary'
@@ -253,11 +276,13 @@ export interface FileRouteTypes {
     | '/transcription-settings'
     | '/upload'
     | '/checkout/$orderId'
+    | '/transcript/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  AdminRoute: typeof AdminRoute
   ApiRoute: typeof ApiRoute
   ContactRoute: typeof ContactRoute
   CustomDictionaryRoute: typeof CustomDictionaryRoute
@@ -275,6 +300,7 @@ export interface RootRouteChildren {
   TranscriptionSettingsRoute: typeof TranscriptionSettingsRoute
   UploadRoute: typeof UploadRoute
   CheckoutOrderIdRoute: typeof CheckoutOrderIdRoute
+  TranscriptIdRoute: typeof TranscriptIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -391,6 +417,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/about': {
       id: '/about'
       path: '/about'
@@ -403,6 +436,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/transcript/$id': {
+      id: '/transcript/$id'
+      path: '/transcript/$id'
+      fullPath: '/transcript/$id'
+      preLoaderRoute: typeof TranscriptIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/checkout/$orderId': {
@@ -418,6 +458,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  AdminRoute: AdminRoute,
   ApiRoute: ApiRoute,
   ContactRoute: ContactRoute,
   CustomDictionaryRoute: CustomDictionaryRoute,
@@ -435,6 +476,7 @@ const rootRouteChildren: RootRouteChildren = {
   TranscriptionSettingsRoute: TranscriptionSettingsRoute,
   UploadRoute: UploadRoute,
   CheckoutOrderIdRoute: CheckoutOrderIdRoute,
+  TranscriptIdRoute: TranscriptIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

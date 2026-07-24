@@ -13,6 +13,27 @@ const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ??
   "http://localhost:3001";
 const TOKEN_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+const AUTH_REQUEST_TIMEOUT_MS = 10_000;
+
+function isDefinitiveAuthFailure(status: number) {
+  return status === 401 || status === 403;
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(
+    () => controller.abort(),
+    AUTH_REQUEST_TIMEOUT_MS,
+  );
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 interface User {
   id: number;
@@ -21,6 +42,8 @@ interface User {
   email: string;
   avatar: string | null;
   plan?: PlanCode;
+  role?: "user" | "support" | "finance" | "admin" | "super_admin";
+  accountStatus?: "active" | "blocked";
 }
 
 interface AuthContextType {
@@ -46,19 +69,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [token, setTokenState] = useState<string | null>(null);
   const refreshInFlight = useRef<Promise<boolean> | null>(null);
+  const userRef = useRef<User | null>(null);
+  const tokenRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
 
   const fetchUser = useCallback(async (authToken: string) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/auth/me`, {
+      const res = await fetchWithTimeout(`${API_URL}/api/auth/me`, {
         headers: { Authorization: `Bearer ${authToken}` },
       });
-      if (!res.ok) throw new Error("invalid token");
+      if (isDefinitiveAuthFailure(res.status)) {
+        setTokenState(null);
+        setUser(null);
+        return;
+      }
+      if (!res.ok) throw new Error("auth service temporarily unavailable");
       const data = (await res.json()) as User;
       setUser(data);
     } catch {
-      setTokenState(null);
-      setUser(null);
+      // Keep the current session during timeouts and temporary 5xx responses.
     } finally {
       setIsLoading(false);
     }
@@ -71,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const run = async () => {
       try {
         const requestRefresh = () =>
-          fetch(`${API_URL}/api/auth/refresh`, {
+          fetchWithTimeout(`${API_URL}/api/auth/refresh`, {
             method: "POST",
             credentials: "include",
           });
@@ -86,14 +123,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           res = await requestRefresh();
           data = (await res.json().catch(() => ({}))) as typeof data;
         }
-        if (!res.ok || !data.token || !data.user) throw new Error("no session");
+        if (isDefinitiveAuthFailure(res.status)) {
+          setTokenState(null);
+          setUser(null);
+          return false;
+        }
+        if (!res.ok || !data.token || !data.user) {
+          throw new Error("auth service temporarily unavailable");
+        }
         setTokenState(data.token);
         setUser(data.user);
         return true;
       } catch {
-        setTokenState(null);
-        setUser(null);
-        return false;
+        return Boolean(userRef.current && tokenRef.current);
       } finally {
         if (showLoading) setIsLoading(false);
       }
@@ -116,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function logout() {
     const currentToken = token;
-    void fetch(`${API_URL}/api/auth/logout`, {
+    void fetchWithTimeout(`${API_URL}/api/auth/logout`, {
       method: "POST",
       credentials: "include",
       headers: currentToken

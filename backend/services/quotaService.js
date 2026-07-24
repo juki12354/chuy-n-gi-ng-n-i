@@ -1,7 +1,8 @@
 const pool = require("../db");
 const { rewardReferralAfterFirstUsage } = require("./referralService");
+const { syncQuotaAlertState } = require("./quotaAlertService");
 
-const SYSTEM_MAX_UPLOAD_MB = getEnvInt("MAX_UPLOAD_MB", 200);
+const SYSTEM_MAX_UPLOAD_MB = getEnvInt("MAX_UPLOAD_MB", 2048);
 
 function createHttpError(statusCode, message, details = {}) {
   const error = new Error(message);
@@ -252,6 +253,7 @@ async function validateBeforeTranscription({
   db = pool,
 }) {
   const quota = await getQuotaStatus(userId, { db });
+  await syncQuotaAlertState({ userId, quota, source, db });
   const fileSizeMb = file?.size ? file.size / 1024 / 1024 : 0;
   const expected =
     expectedDurationSeconds !== null && expectedDurationSeconds !== undefined
@@ -307,7 +309,13 @@ async function validateAfterTranscription({
   const quota = await getQuotaStatus(userId, { excludeJobId, db });
   const duration = Math.ceil(Number(durationSeconds || 0));
 
-  if (duration <= 0) return quota;
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw createHttpError(
+      422,
+      "Không xác định được thời lượng hợp lệ của file âm thanh.",
+      { quota },
+    );
+  }
 
   if (duration > quota.limits.maxFileSeconds) {
     throw createHttpError(
@@ -360,10 +368,16 @@ async function recordQuotaUsage({
   userId,
   transcriptionId,
   durationSeconds,
+  source = "transcription",
   db = pool,
 }) {
   const seconds = Math.ceil(Number(durationSeconds || 0));
-  if (seconds <= 0) return null;
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw createHttpError(
+      422,
+      "Không thể ghi nhận quota vì thời lượng âm thanh không hợp lệ.",
+    );
+  }
 
   await db.query("SELECT id FROM users WHERE id = $1 FOR UPDATE", [userId]);
   const billing = await getUserBilling(userId, db);
@@ -424,7 +438,19 @@ async function recordQuotaUsage({
     }
   }
 
-  return rows[0];
+  const quota = await getQuotaStatus(userId, { db });
+  const quotaAlert = await syncQuotaAlertState({
+    userId,
+    quota,
+    source,
+    db,
+  });
+
+  return {
+    ...rows[0],
+    quotaAlert: quotaAlert.alert,
+    quotaAlertCreated: quotaAlert.created,
+  };
 }
 
 async function upgradeUserPlan(userId, plan = "special", billingCycle = "monthly") {
@@ -454,7 +480,9 @@ async function upgradeUserPlan(userId, plan = "special", billingCycle = "monthly
      WHERE id = $4`,
     [planName, quotaSeconds, expiresAt, userId],
   );
-  return getQuotaStatus(userId);
+  const quota = await getQuotaStatus(userId);
+  await syncQuotaAlertState({ userId, quota, source: "plan_upgrade" });
+  return quota;
 }
 
 module.exports = {

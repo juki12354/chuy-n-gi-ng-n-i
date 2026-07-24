@@ -13,6 +13,7 @@ const {
   getPaymentLinkInformation,
   verifyWebhook,
 } = require("./payosService");
+const { syncQuotaAlertState } = require("./quotaAlertService");
 
 const FRONTEND_URL = (process.env.FRONTEND_URL || "http://localhost:3000").replace(
   /\/$/,
@@ -30,6 +31,19 @@ const PAYOS_STATUS_CHECK_INTERVAL_SECONDS = Math.max(
   4,
   Number.parseInt(process.env.PAYOS_STATUS_CHECK_INTERVAL_SECONDS || "8", 10),
 );
+const BILLING_RECONCILE_INTERVAL_MS = Math.max(
+  30_000,
+  Number.parseInt(process.env.BILLING_RECONCILE_INTERVAL_MS || "60000", 10),
+);
+const BILLING_RECONCILE_BATCH_SIZE = Math.max(
+  1,
+  Math.min(
+    100,
+    Number.parseInt(process.env.BILLING_RECONCILE_BATCH_SIZE || "25", 10),
+  ),
+);
+let billingReconcileTimer = null;
+let billingReconcileRunning = false;
 
 const PLAN_PRICES = {
   standard: {
@@ -419,8 +433,27 @@ async function reconcilePayosOrder(row) {
   if (Number(payment.amount) !== Number(order.amount)) {
     throw createHttpError(400, "Số tiền yêu cầu trên PayOS không khớp");
   }
-  if (String(payment.status || "").toUpperCase() !== "PAID") {
-    return serializeOrder(order);
+  const paymentStatus = String(payment.status || "").toUpperCase();
+  if (paymentStatus !== "PAID") {
+    const expiresAt = order.expires_at ? new Date(order.expires_at) : null;
+    const expiredLocally =
+      expiresAt && expiresAt.getTime() + 5 * 60 * 1000 < Date.now();
+    const terminalStatus =
+      paymentStatus === "CANCELLED"
+        ? "cancelled"
+        : paymentStatus === "EXPIRED" || expiredLocally
+          ? "expired"
+          : null;
+    if (!terminalStatus) return serializeOrder(order);
+
+    const terminal = await pool.query(
+      `UPDATE billing_orders
+       SET status = $2, updated_at = NOW()
+       WHERE id = $1 AND status = 'pending'
+       RETURNING *`,
+      [order.id, terminalStatus],
+    );
+  return serializeOrder(terminal.rows[0] || { ...order, status: terminalStatus });
   }
   if (Number(payment.amountPaid || 0) < Number(order.amount)) {
     throw createHttpError(400, "PayOS chưa ghi nhận đủ số tiền của đơn hàng");
@@ -469,6 +502,57 @@ async function reconcilePayosOrder(row) {
       },
     },
   });
+}
+
+async function reconcileExpiredPendingOrders() {
+  const { rows } = await pool.query(
+    `SELECT *
+     FROM billing_orders
+     WHERE provider = 'payos'
+       AND status = 'pending'
+       AND expires_at IS NOT NULL
+       AND expires_at + INTERVAL '5 minutes' < NOW()
+     ORDER BY expires_at ASC
+     LIMIT $1`,
+    [BILLING_RECONCILE_BATCH_SIZE],
+  );
+
+  let reconciled = 0;
+  for (const order of rows) {
+    try {
+      await reconcilePayosOrder(order);
+      reconciled += 1;
+    } catch (error) {
+      console.error(
+        `PayOS background reconciliation failed for order ${order.id}:`,
+        error.message,
+      );
+    }
+  }
+  return reconciled;
+}
+
+function startBillingReconciliationDispatcher() {
+  if (billingReconcileTimer) return;
+
+  const run = async () => {
+    if (billingReconcileRunning) return;
+    billingReconcileRunning = true;
+    try {
+      await reconcileExpiredPendingOrders();
+    } catch (error) {
+      console.error("PayOS background reconciliation failed:", error.message);
+    } finally {
+      billingReconcileRunning = false;
+    }
+  };
+
+  void run();
+  billingReconcileTimer = setInterval(
+    () => void run(),
+    BILLING_RECONCILE_INTERVAL_MS,
+  );
+  billingReconcileTimer.unref?.();
 }
 
 async function getOrderForUser(userId, orderId) {
@@ -674,6 +758,18 @@ async function completePaidOrder({
 
     await client.query("COMMIT");
     transactionClosed = true;
+
+    try {
+      const quota = await getQuotaStatus(order.user_id);
+      await syncQuotaAlertState({
+        userId: order.user_id,
+        quota,
+        source: productType === "top_up" ? "top_up_payment" : "plan_payment",
+      });
+    } catch (alertError) {
+      console.error("Quota alert refresh after payment failed:", alertError.message);
+    }
+
     return serializeOrder(paidOrder.rows[0]);
   } catch (error) {
     if (!transactionClosed) await client.query("ROLLBACK");
@@ -737,5 +833,7 @@ module.exports = {
   listPlans,
   listTopUps,
   listUserOrders,
+  reconcileExpiredPendingOrders,
   resumeActivePlan,
+  startBillingReconciliationDispatcher,
 };
